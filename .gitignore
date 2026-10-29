@@ -9,3 +9,5 @@ data/
 *.log
 coverage/
 test-results/
+.amp/portals/
+.amp/in/artifacts/
