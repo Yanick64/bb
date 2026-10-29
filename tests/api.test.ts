@@ -190,6 +190,7 @@ test("Orbit parser validates identity alignment and accepts the observed table f
   const result = parseOrbitProjects(table);
   expect(result.projects[0]).toEqual({
     provider: "orbit",
+    scope: "project",
     externalId: "PR0000000000001",
     name: "Example site",
     client: "Example client",

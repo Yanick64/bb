@@ -1,5 +1,41 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Fira Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/fira-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Fira Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/fira-sans-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Fira Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/fira-sans-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/barlow-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/barlow-700.woff2") format("woff2");
+}
+
 @custom-variant dark (&:is(.dark *));
 @theme inline {
   --color-background: var(--background);
@@ -8,41 +44,41 @@
   --color-border: var(--border);
 }
 :root {
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Fira Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color-scheme: light;
-  --background: #faf9f7;
+  --background: #f9f9fd;
   --surface: #fff;
-  --sidebar: #f4f3ef;
-  --foreground: #272822;
-  --muted: #64675e;
-  --faint: #64675e;
-  --border: #e7e6e0;
-  --soft: #f5f5f1;
-  --primary: #bd451b;
-  --primary-hover: #bc3b0d;
-  --orange-soft: #fff0e7;
+  --sidebar: #efeff8;
+  --foreground: #19171f;
+  --muted: #656172;
+  --faint: #656172;
+  --border: #e1dfea;
+  --soft: #efeff8;
+  --primary: #762bff;
+  --primary-hover: #6020d4;
+  --orange-soft: #efe7ff;
   --green: #36745a;
   --green-soft: #eaf4ee;
   --blue: #4b6ba1;
   --blue-soft: #edf2fa;
-  --purple: #7962a5;
-  --purple-soft: #f1edf8;
+  --purple: #6a30b4;
+  --purple-soft: #efe7ff;
   --rose: #b8647b;
   --shadow: 0 8px 36px #20251d0d;
 }
 .dark {
   color-scheme: dark;
-  --background: #181b19;
-  --surface: #212521;
-  --sidebar: #1c201c;
-  --foreground: #e9ebe4;
-  --muted: #a5aaa0;
-  --faint: #a0a698;
-  --border: #363c33;
-  --soft: #292e27;
-  --primary: #f08051;
-  --primary-hover: #f59a74;
-  --orange-soft: #3b2b23;
+  --background: #121014;
+  --surface: #1b181f;
+  --sidebar: #151219;
+  --foreground: #f5f2fa;
+  --muted: #b1a9bf;
+  --faint: #b1a9bf;
+  --border: #37303f;
+  --soft: #28222f;
+  --primary: #ba96ff;
+  --primary-hover: #cdb2ff;
+  --orange-soft: #302044;
   --green: #8bbd9d;
   --green-soft: #25392b;
   --blue: #9aafd7;
@@ -127,10 +163,17 @@ p {
   margin: 0;
 }
 h1 {
-  font-size: 28px;
+  font-size: 32px;
   line-height: 1.25;
   letter-spacing: -0.9px;
-  font-weight: 650;
+  font-weight: 700;
+}
+h1,
+h2,
+h3,
+h4,
+.brand strong {
+  font-family: "Barlow", "Fira Sans", sans-serif;
 }
 h2 {
   font-size: 17px;
@@ -230,7 +273,7 @@ time {
   box-shadow: 0 1px 2px #0001;
 }
 .dark .button-primary {
-  color: #211811;
+  color: #1b102b;
 }
 .button-primary:hover:not(:disabled) {
   background: var(--primary-hover);
@@ -331,7 +374,7 @@ time {
   height: 36px;
   border-radius: 10px;
   color: white;
-  background: #df5b2b;
+  background: #762bff;
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -3px;
@@ -399,8 +442,8 @@ time {
   color: var(--foreground);
 }
 .nav-item.active {
-  background: var(--surface);
-  color: var(--foreground);
+  background: var(--orange-soft);
+  color: var(--primary);
   box-shadow: 0 1px 3px #0000000c;
   font-weight: 550;
 }
@@ -543,13 +586,18 @@ time {
   height: 27px;
   border: 2px solid var(--surface);
   outline: 1px solid var(--border);
-  background: #e0d6c2;
-  color: #605744;
+  background: var(--orange-soft);
+  color: var(--primary);
   font-weight: 600;
   border-radius: 50%;
   margin-left: 10px;
 }
 .page-header {
+  background: linear-gradient(
+    110deg,
+    transparent 60%,
+    color-mix(in srgb, var(--primary) 5%, transparent)
+  );
   padding: 35px 36px 27px;
   display: flex;
   align-items: center;
@@ -1824,12 +1872,14 @@ time {
 @media (max-width: 680px) {
   .sidebar {
     transform: translateX(-100%);
+    visibility: hidden;
     width: 232px;
     transition: transform 0.2s;
     z-index: 40;
   }
   .sidebar-open {
     transform: none;
+    visibility: visible;
   }
   .main {
     margin-left: 0;
@@ -1870,18 +1920,25 @@ time {
     font-size: 22px;
   }
   .filterbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     padding: 0 18px 16px;
     gap: 8px;
+  }
+  .filterbar > .spacer {
+    display: none;
   }
   .filterbar > .small {
     display: none;
   }
   .search-field {
-    flex: 1;
-    width: 130px;
+    grid-column: 1 / -1;
+    width: 100%;
   }
   .filterbar select {
-    max-width: 130px;
+    max-width: 100%;
+    width: 100%;
+    min-height: 40px;
   }
   .board {
     padding: 0 18px 25px;

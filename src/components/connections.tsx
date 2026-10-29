@@ -24,17 +24,17 @@ export function Connections({ state }: { state: State }) {
     },
     {
       name: "Teamleader Orbit",
-      subtitle: "Projectselectie en ticketinvoer",
+      subtitle: "Klantselectie en ticketinvoer",
       ready: state.connections.orbit,
-      text: "Gebruik de Streamable HTTP MCP-URL van jouw Orbit-tenant. Deze verbinding staat los van de MCP-toegang van je coding assistant. Taken worden alleen uit jouw gekozen projecten opgehaald.",
+      text: "Gebruik de Streamable HTTP MCP-URL van jouw Orbit-tenant. Selecteer per BB-project de Orbit-klanten. BB haalt hun tickets op via klant-ID, ook als een ticket geen Orbit-project heeft.",
       code: "ORBIT_MCP_URL=https://…\nORBIT_MCP_TOKEN=…",
     },
     {
       name: "Sentry",
       subtitle: "Issues naar het juiste project",
       ready: state.connections.sentry,
-      text: "Gebruik een token met leestoegang tot je Sentry-projecten en issues. Kies daarna per BB-project welke Sentry-projecten erbij horen.",
-      code: "SENTRY_AUTH_TOKEN=…\nSENTRY_ORG=…",
+      text: "Verbind via Sentry MCP en geef BB toegang met je Sentry-account. Kies daarna per BB-project de Sentry-projecten. De MCP-synchronisatie haalt onopgeloste issues uit de afgelopen zeven dagen op.",
+      code: "SENTRY_MCP_URL=https://mcp.sentry.dev/mcp\nSENTRY_ORG=…",
     },
     {
       name: "Orbit-webhook",
@@ -61,15 +61,52 @@ export function Connections({ state }: { state: State }) {
             <p className="muted">{card.subtitle}</p>
             <p>{card.text}</p>
             <pre>{card.code}</pre>
+            {card.name === "Teamleader Orbit" && state.connections.orbitConfigured ? (
+              <>
+                <Button
+                  variant="secondary"
+                  disabled={action.isPending}
+                  onClick={() =>
+                    action.mutate(
+                      { path: "/api/sources/orbit/check", body: {} },
+                      { onSuccess: () => toast("Orbit-verbinding gecontroleerd") },
+                    )
+                  }
+                >
+                  Verbinding controleren
+                </Button>
+                {state.connections.orbitError ? (
+                  <p className="inline-error">{state.connections.orbitError}</p>
+                ) : null}
+              </>
+            ) : null}
+            {card.name === "Sentry" && state.connections.sentryMcp ? (
+              <Button
+                disabled={action.isPending}
+                onClick={() =>
+                  action.mutate(
+                    { path: "/api/sentry/oauth/start", body: {} },
+                    {
+                      onSuccess: (data) => {
+                        const { url } = data as { url: string | null };
+                        if (url) window.location.assign(url);
+                        else toast("Sentry MCP is verbonden");
+                      },
+                    },
+                  )
+                }
+              >
+                {card.ready ? "Sentry-login vernieuwen" : "Verbind Sentry via MCP"}
+              </Button>
+            ) : null}
           </section>
         ))}
       </div>
       {state.connections.orbitCatalog ? (
         <p className="notice">
-          Er staan {state.connections.orbitCatalog.count} echte Orbit-projecten in de lokale
-          catalogus, opgehaald op {relativeDate(state.connections.orbitCatalog.capturedAt)}.
-          Selecteer ze bij Projectinstellingen. Deze momentopname bevat projectnamen en klanten; er
-          zijn nog geen klanttickets geïmporteerd.
+          Er staan {state.connections.orbitCatalog.count} Orbit-klanten in de lokale catalogus,
+          opgehaald op {relativeDate(state.connections.orbitCatalog.capturedAt)}. Selecteer ze bij
+          Projectinstellingen. Deze momentopname bevat alleen klantnamen en ID's.
         </p>
       ) : null}
       <p className="notice">

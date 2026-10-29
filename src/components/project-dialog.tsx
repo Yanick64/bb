@@ -13,7 +13,7 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
     project ?? {
       name: "",
       description: "",
-      color: "orange",
+      color: "purple",
       ampProject: "",
       repository: "",
       qualityCommands: "",
@@ -28,10 +28,17 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
   const toast = useToast();
   const sources = useQuery({
     queryKey: ["sources", provider, search, page],
-    queryFn: () =>
-      api<{ projects: SourceProject[]; hasMore: boolean; snapshotAt?: string }>(
-        `/api/sources/${provider}/projects?q=${encodeURIComponent(search ?? "")}&page=${page}`,
-      ),
+    queryFn: async () => {
+      const result = await api<{
+        projects?: SourceProject[];
+        clients?: SourceProject[];
+        hasMore: boolean;
+        snapshotAt?: string;
+      }>(
+        `/api/sources/${provider}/${provider === "orbit" ? "clients" : "projects"}?q=${encodeURIComponent(search ?? "")}&page=${page}`,
+      );
+      return { ...result, items: result.clients ?? result.projects ?? [] };
+    },
     enabled: search !== null,
     retry: false,
   });
@@ -128,15 +135,21 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
             <Link2 size={16} /> Gekoppelde bronnen
           </h3>
           <p className="muted">
-            Selecteer Orbit-projecten van één of meerdere klanten. Nieuwe taken komen op dit board.
+            Selecteer één of meerdere Orbit-klanten. Hun tickets komen op dit board, ook zonder
+            Orbit-project. Koppel daarnaast de Sentry-projecten die erbij horen.
           </p>
           <div className="mapped-sources">
             {form.mappings.map((m) => (
-              <div className="mapping" key={`${m.provider}:${m.externalId}`}>
+              <div className="mapping" key={`${m.provider}:${m.scope}:${m.externalId}`}>
                 <span>
                   <strong>{m.name}</strong>
                   <small>
-                    {m.provider === "orbit" ? "Orbit" : "Sentry"} · {m.client || m.externalId}
+                    {m.provider === "orbit"
+                      ? m.scope === "client"
+                        ? "Orbit-klant"
+                        : "Orbit-project, bestaande koppeling"
+                      : "Sentry-project"}{" "}
+                    · {m.externalId}
                   </small>
                 </span>
                 <Button
@@ -166,14 +179,14 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
                 setPage(1);
               }}
             >
-              <option value="orbit">Teamleader Orbit</option>
-              <option value="sentry">Sentry</option>
+              <option value="orbit">Orbit-klanten</option>
+              <option value="sentry">Sentry-projecten</option>
             </select>
             <input
-              aria-label="Zoek externe projecten"
+              aria-label={provider === "orbit" ? "Zoek Orbit-klanten" : "Zoek Sentry-projecten"}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Zoek project of klant…"
+              placeholder={provider === "orbit" ? "Zoek klantnaam…" : "Zoek Sentry-project…"}
             />
             <Button
               type="button"
@@ -187,17 +200,19 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
               Zoeken
             </Button>
           </div>
-          {sources.isFetching ? <p className="muted">Projecten ophalen…</p> : null}
+          {sources.isFetching ? (
+            <p className="muted">{provider === "orbit" ? "Klanten" : "Projecten"} ophalen…</p>
+          ) : null}
           {sources.data?.snapshotAt ? (
             <p className="notice">
-              Lokale Orbit-momentopname van{" "}
-              {new Date(sources.data.snapshotAt).toLocaleDateString("nl-NL")}. Je kunt projecten
-              kiezen. Configureer de Orbit-verbinding voor actuele tickets.
+              Lokale {provider === "orbit" ? "Orbit-klantencatalogus" : "Sentry-projectcatalogus"}{" "}
+              van {new Date(sources.data.snapshotAt).toLocaleDateString("nl-NL")}. Configureer de
+              verbinding voor actuele {provider === "orbit" ? "tickets" : "issues"}.
             </p>
           ) : null}
           {sources.error ? <p className="inline-error">{sources.error.message}</p> : null}
           <div className="source-results">
-            {sources.data?.projects.map((p) => {
+            {sources.data?.items.map((p) => {
               const selected = form.mappings.some(
                 (m) => m.provider === p.provider && m.externalId === p.externalId,
               );
@@ -211,15 +226,15 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
                 >
                   <span>
                     <strong>{p.name}</strong>
-                    <small>{p.client}</small>
+                    <small>{provider === "orbit" ? p.externalId : p.client}</small>
                   </span>
                   {selected ? <Check size={16} /> : <span className="muted">Koppelen</span>}
                 </button>
               );
             })}
           </div>
-          {sources.data && !sources.data.projects.length ? (
-            <p className="muted">Geen projecten gevonden.</p>
+          {sources.data && !sources.data.items.length ? (
+            <p className="muted">Geen {provider === "orbit" ? "klanten" : "projecten"} gevonden.</p>
           ) : null}
           {sources.data ? (
             <div className="row">

@@ -1,7 +1,7 @@
 # Architecture
 
 ```text
-Orbit MCP / webhooks     Sentry API       Manual input
+Orbit MCP / webhooks     Sentry MCP / API       Manual input
           \                 |                 /
               Normalized source signals
                          |
@@ -26,18 +26,20 @@ React UI <-> Hono HTTP API + SSE <-> SQLite
 
 ## Boundaries
 
-| Module                 | Responsibility                                                                          |
-| ---------------------- | --------------------------------------------------------------------------------------- |
-| `shared/domain.ts`     | Zod boundary schemas, inferred types and deterministic next actions                     |
-| `server/store.ts`      | SQLite transactions, projects, task aggregates, signals, run events and settings        |
-| `server/workflow.ts`   | Plan approval, questions, review gates, delivery and idempotent intake                  |
-| `server/amp.ts`        | Queuing, remote CLI execution, JSON-lines consumption, thread continuation and recovery |
-| `server/artifacts.ts`  | Validated image storage and private Amp screenshot retrieval                            |
-| `server/connectors.ts` | Read-only Orbit MCP and Sentry REST adapters                                            |
-| `server/webhooks.ts`   | Authenticated, persisted receipt inbox and explicit payload normalization               |
-| `server/mcp.ts`        | Project-scoped agent access without approval or delivery capabilities                   |
-| `server/app.ts`        | HTTP boundaries, authentication, uploads, live notifications and static serving         |
-| `src/components/`      | Project selection, task conversation, questions, plan editing and review                |
+| Module                         | Responsibility                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| `shared/domain.ts`             | Zod boundary schemas, inferred types and deterministic next actions                     |
+| `server/store.ts`              | SQLite transactions, projects, task aggregates, signals, run events and settings        |
+| `server/workflow.ts`           | Plan approval, questions, review gates, delivery and idempotent intake                  |
+| `server/amp.ts`                | Queuing, remote CLI execution, JSON-lines consumption, thread continuation and recovery |
+| `server/artifacts.ts`          | Validated image storage and private Amp screenshot retrieval                            |
+| `server/connectors.ts`         | Read-only Orbit client and Sentry MCP/REST adapters                                     |
+| `server/sentry-mcp.ts`         | Persistent OAuth connection, PKCE/state checks, serialized credential operations        |
+| `server/agent-instructions.ts` | Agency-wide rules and phase-specific execution instructions                             |
+| `server/webhooks.ts`           | Authenticated, persisted receipt inbox and explicit payload normalization               |
+| `server/mcp.ts`                | Project-scoped agent access without approval or delivery capabilities                   |
+| `server/app.ts`                | HTTP boundaries, authentication, uploads, live notifications and static serving         |
+| `src/components/`              | Project selection, task conversation, questions, plan editing and review                |
 
 React + Vite serves the operator UI. Hono runs on Bun. SQLite uses WAL and synchronous transactions. This first version uses Bun's SQLite driver directly rather than adding an ORM or workflow framework. Task-local questions, plans and evidence are stored together as JSON; globally unique signal identities and run events have their own tables.
 
@@ -46,14 +48,17 @@ This design assumes one server process per database. It does not claim distribut
 ## Workflow rules
 
 - A task may start without a project. Execution requires an assigned project.
-- A BB project can select multiple external projects from multiple clients. A source project maps to at most one BB project.
+- A BB project can select multiple Orbit clients and Sentry projects. Each provider/scope/external ID maps to at most one BB project. Orbit client-ID matches take precedence over legacy project-ID matches.
 - Signals have stable provider/external-ID identity. Several signals may link to one task.
 - Plan contents are versioned. Only the latest plan can be approved. A new version does not inherit approval.
 - Blocking questions identify the phase they prevent. An answer to a blocking question invalidates prior plan approval and review.
+- The final blocking answer and automatic continuation share one transaction. Continuation requires Amp enabled and a successful prior run in the same BB/Amp project. Failed and interrupted runs are never retried automatically. Implementation answers return to planning because approval was invalidated.
 - Implementation/revision execution requires the approved current plan and no unresolved planning/implementation questions.
 - Each implementation turn starts a new review cycle. Evidence from an earlier cycle remains visible as history but cannot authorize delivery.
 - Review requires accepted evidence for every criterion at the current code/document revision. Failed, unconfigured, running or unrun checks cannot be treated as passed.
 - Delivery records what was delivered. It requires the accepted current review and no unresolved blocking questions.
+- Delivery drafts carry the plan version and review cycle. New scope or implementation invalidates them. If no current draft exists, BB builds an editable note from accepted evidence. Technical review and delivery agent runs cannot grant human approval.
+- A task has one optional roster assignee. Local time entries identify a roster member, actual minutes, date, classification and agreement. Roster membership is not authentication or authority to approve work.
 - A successful Amp process is an execution result, not human acceptance. Malformed structured output produces a manual-review action.
 
 ## Recovery and idempotency

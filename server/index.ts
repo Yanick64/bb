@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { AmpWorker } from "./amp";
 import { createApp } from "./app";
 import { Connectors } from "./connectors";
+import { SentryMcp } from "./sentry-mcp";
 import { Store } from "./store";
 import { processReceipt, receipts } from "./webhooks";
 
@@ -12,13 +13,26 @@ const dataDir = resolve(Bun.env.BB_DATA_DIR ?? "./data");
 if (Bun.env.BB_PUBLIC_URL && !Bun.env.BB_PASSWORD)
   throw new Error("BB_PASSWORD is required with a public URL");
 const store = new Store(resolve(dataDir, "bb.sqlite"));
-const connectors = new Connectors({
-  orbitUrl: Bun.env.ORBIT_MCP_URL,
-  orbitToken: Bun.env.ORBIT_MCP_TOKEN,
-  sentryUrl: Bun.env.SENTRY_BASE_URL ?? "https://sentry.io",
-  sentryToken: Bun.env.SENTRY_AUTH_TOKEN,
-  sentryOrg: Bun.env.SENTRY_ORG,
-});
+const sentryMcp = Bun.env.SENTRY_MCP_URL
+  ? new SentryMcp(
+      store,
+      Bun.env.SENTRY_MCP_URL,
+      new URL(
+        "/api/sentry/oauth/callback",
+        Bun.env.BB_PUBLIC_URL || `http://localhost:${Bun.env.BB_PORT ?? 4310}`,
+      ).href,
+    )
+  : undefined;
+const connectors = new Connectors(
+  {
+    orbitUrl: Bun.env.ORBIT_MCP_URL,
+    orbitToken: Bun.env.ORBIT_MCP_TOKEN,
+    sentryUrl: Bun.env.SENTRY_BASE_URL ?? "https://sentry.io",
+    sentryToken: Bun.env.SENTRY_AUTH_TOKEN,
+    sentryOrg: Bun.env.SENTRY_ORG,
+  },
+  sentryMcp,
+);
 const enabled = Bun.env.BB_AMP_ENABLED === "true";
 const app = createApp(store, connectors, {
   dataDir,

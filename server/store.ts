@@ -1,8 +1,8 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Project, ProjectInput, Signal, Task } from "../shared/domain";
-import { taskInput } from "../shared/domain";
+import type { Member, Project, ProjectInput, Signal, Task } from "../shared/domain";
+import { mappingSchema, taskInput } from "../shared/domain";
 
 export class AppError extends Error {
   constructor(
@@ -16,6 +16,9 @@ export const now = () => new Date().toISOString();
 export const id = () => crypto.randomUUID();
 export function activity(task: Task, text: string) {
   task.activity.push({ id: id(), text, createdAt: now() });
+}
+function normalizeTask(data: string): Task {
+  return { assigneeId: null, timeEntries: [], deliveryDraft: null, ...JSON.parse(data) };
 }
 export class Store {
   db: Database;
@@ -38,20 +41,23 @@ export class Store {
     return this.db
       .query<{ data: string }, []>("SELECT data FROM projects ORDER BY rowid")
       .all()
-      .map((r) => JSON.parse(r.data));
+      .map((r) => {
+        const project = JSON.parse(r.data) as Project;
+        return { ...project, mappings: project.mappings.map((m) => mappingSchema.parse(m)) };
+      });
   }
   tasks(): Task[] {
     return this.db
       .query<{ data: string }, []>("SELECT data FROM tasks ORDER BY number DESC")
       .all()
-      .map((r) => JSON.parse(r.data));
+      .map((r) => normalizeTask(r.data));
   }
   task(taskId: string): Task {
     const row = this.db
       .query<{ data: string }, [string]>("SELECT data FROM tasks WHERE id=?")
       .get(taskId);
     if (!row) throw new AppError("Taak niet gevonden", 404);
-    return JSON.parse(row.data);
+    return normalizeTask(row.data);
   }
   project(projectId: string): Project {
     const project = this.projects().find((p) => p.id === projectId);
@@ -65,7 +71,10 @@ export class Store {
         (p) =>
           p.id !== projectId &&
           p.mappings.some(
-            (m) => m.provider === mapping.provider && m.externalId === mapping.externalId,
+            (m) =>
+              m.provider === mapping.provider &&
+              m.scope === mapping.scope &&
+              m.externalId === mapping.externalId,
           ),
       );
       if (conflict) throw new AppError(`Deze bron is al gekoppeld aan ${conflict.name}`, 409);
@@ -90,6 +99,9 @@ export class Store {
     return this.db.transaction(() => {
       const task: Task = {
         ...data,
+        assigneeId: null,
+        timeEntries: [],
+        deliveryDraft: null,
         id: id(),
         number: 0,
         stage: "inbox",
@@ -143,6 +155,23 @@ export class Store {
     return this.db
       .query<{ value: string }, [string]>("SELECT value FROM settings WHERE key=?")
       .get(key)?.value;
+  }
+  members(): Member[] {
+    return JSON.parse(this.setting("members") ?? "[]");
+  }
+  member(memberId: string) {
+    const member = this.members().find((m) => m.id === memberId);
+    if (!member) throw new AppError("Teamlid niet gevonden", 404);
+    return member;
+  }
+  addMember(name: string): Member {
+    const members = this.members();
+    if (members.some((m) => m.name.toLocaleLowerCase() === name.toLocaleLowerCase()))
+      throw new AppError("Dit teamlid bestaat al", 409);
+    const member = { id: id(), name };
+    this.setSetting("members", JSON.stringify([...members, member]));
+    this.changed();
+    return member;
   }
   setSetting(key: string, value: string) {
     this.db

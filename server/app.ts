@@ -6,10 +6,15 @@ import { serveStatic } from "hono/bun";
 import { setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
-import { projectInput, taskInput } from "../shared/domain";
-import { enqueue } from "./amp";
+import { mappingSchema, projectInput, taskInput } from "../shared/domain";
+import { commandAndContinue, enqueue } from "./amp";
 import { saveImage } from "./artifacts";
-import { type Connectors, parseOrbitProjects, type SourceProject } from "./connectors";
+import {
+  type Connectors,
+  parseOrbitClients,
+  parseOrbitProjects,
+  type SourceProject,
+} from "./connectors";
 import { seedDemo } from "./demo";
 import { createProjectToken, handleMcp } from "./mcp";
 import { AppError, type Store } from "./store";
@@ -21,7 +26,7 @@ import {
   secureEqual,
   verifyWebhook,
 } from "./webhooks";
-import { command, ingest, taskCommand } from "./workflow";
+import { ingest, taskCommand } from "./workflow";
 
 export type AppConfig = {
   dataDir: string;
@@ -123,6 +128,14 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     return c.json({ receiptId: receipt.id, status: receipt.status }, 202);
   });
   app.all("/mcp/:projectId", (c) => handleMcp(store, c.req.raw, c.req.param("projectId")));
+  app.get("/api/sentry/oauth/callback", async (c) => {
+    if (!connectors.sentryMcp) throw new AppError("Sentry MCP is niet ingesteld", 503);
+    const { state, code } = z
+      .object({ state: z.string().min(1), code: z.string().min(1) })
+      .parse(c.req.query());
+    await connectors.sentryMcp.callback(state, code);
+    return c.redirect("/?view=connections");
+  });
   app.use("/api/*", async (c, next) => {
     if (!authenticated(c.req.header("cookie"))) return c.json({ error: "Log eerst in" }, 401);
     await next();
@@ -131,19 +144,26 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     if (!authenticated(c.req.header("cookie"))) return c.json({ error: "Log eerst in" }, 401);
     await next();
   });
+  app.post("/api/sentry/oauth/start", async (c) => {
+    if (!connectors.sentryMcp) throw new AppError("Stel SENTRY_MCP_URL en SENTRY_ORG in", 503);
+    return c.json({ url: await connectors.sentryMcp.authorize() });
+  });
   app.get("/api/state", (c) =>
     c.json({
       projects: store.projects(),
-      tasks: store.tasks().map((t) => ({ ...t, runs: t.runs.map((r) => ({ ...r, prompt: "" })) })),
+      members: store.members(),
+      tasks: store
+        .tasks()
+        .map((t) => ({ ...t, runs: t.runs.map((r) => ({ ...r, prompt: "", result: "" })) })),
       connections: {
         ...connectors.status,
         amp: config.ampEnabled,
         webhook: Boolean(config.webhookSecret),
         publicUrl: config.publicUrl ?? "",
-        orbitCatalog: catalog("orbit")
+        orbitCatalog: catalog("orbit:clients")
           ? {
-              count: catalog("orbit")?.projects.length ?? 0,
-              capturedAt: catalog("orbit")?.capturedAt ?? "",
+              count: catalog("orbit:clients")?.projects.length ?? 0,
+              capturedAt: catalog("orbit:clients")?.capturedAt ?? "",
             }
           : null,
       },
@@ -171,6 +191,12 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     }),
   );
   app.post("/api/demo", (c) => c.json(seedDemo(store), 201));
+  app.post("/api/members", async (c) => {
+    const { name } = z
+      .object({ name: z.string().trim().min(1).max(100) })
+      .parse(await c.req.json());
+    return c.json(store.addMember(name), 201);
+  });
   app.post("/api/projects", async (c) =>
     c.json(store.saveProject(projectInput.parse(await c.req.json())), 201),
   );
@@ -218,6 +244,64 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
       ),
     );
   });
+  app.get("/api/sources/orbit/clients", async (c) => {
+    const query = (c.req.query("q") ?? "").slice(0, 200);
+    const page = z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10000)
+      .parse(c.req.query("page") ?? 1);
+    const snapshot = catalog("orbit:clients");
+    const local = () => {
+      if (!snapshot) throw new AppError("Geen lokale klantencatalogus beschikbaar", 503);
+      const matching = snapshot.projects.filter((p) =>
+        `${p.name} ${p.externalId}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+      );
+      return c.json({
+        clients: matching.slice((page - 1) * 30, page * 30),
+        hasMore: matching.length > page * 30,
+        snapshotAt: snapshot.capturedAt,
+        warning: connectors.status.orbitError,
+      });
+    };
+    if ((!connectors.status.orbitConfigured || connectors.status.orbitError) && snapshot)
+      return local();
+    try {
+      return c.json(await connectors.clients(query, page));
+    } catch (error) {
+      if (snapshot) return local();
+      throw error;
+    }
+  });
+  app.post("/api/sources/orbit/check", async (c) => {
+    await connectors.clients("", 1);
+    return c.json({ ok: true });
+  });
+  app.post("/api/sources/orbit/clients/catalog", async (c) => {
+    const { pages } = z
+      .object({ pages: z.array(z.string().max(500000)).min(1).max(100) })
+      .parse(await c.req.json());
+    const clients = pages.flatMap((page) => parseOrbitClients(page).clients);
+    const projects = [...new Map(clients.map((p) => [p.externalId, p])).values()];
+    const capturedAt = new Date().toISOString();
+    store.setSetting("catalog:orbit:clients", JSON.stringify({ projects, capturedAt }));
+    store.changed();
+    return c.json({ count: projects.length, capturedAt });
+  });
+  app.post("/api/sources/sentry/catalog", async (c) => {
+    const { projects } = z
+      .object({
+        projects: z
+          .array(mappingSchema.refine((m) => m.provider === "sentry" && m.scope === "project"))
+          .max(500),
+      })
+      .parse(await c.req.json());
+    const capturedAt = new Date().toISOString();
+    store.setSetting("catalog:sentry", JSON.stringify({ projects, capturedAt }));
+    store.changed();
+    return c.json({ count: projects.length, capturedAt });
+  });
   app.post("/api/sources/orbit/catalog", async (c) => {
     const { pages } = z
       .object({ pages: z.array(z.string().max(500000)).min(1).max(100) })
@@ -236,14 +320,22 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     const input = z
       .object({ revision: z.number().int().positive(), command: taskCommand })
       .parse(await c.req.json());
-    return c.json(command(store, c.req.param("id"), input.command, input.revision));
+    return c.json(
+      commandAndContinue(
+        store,
+        c.req.param("id"),
+        input.command,
+        input.revision,
+        config.ampEnabled,
+      ),
+    );
   });
   app.post("/api/tasks/:id/runs", async (c) => {
     if (!config.ampEnabled)
       throw new AppError("Schakel Amp in met BB_AMP_ENABLED=true nadat de CLI is aangemeld", 503);
     const data = z
       .object({
-        mode: z.enum(["triage", "plan", "implement", "revise"]),
+        mode: z.enum(["triage", "plan", "implement", "revise", "review", "delivery"]),
         instruction: z.string().max(20000).default(""),
         revision: z.number().int().positive(),
       })

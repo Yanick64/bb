@@ -1,12 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
-import type { Project, Task } from "../../shared/domain";
+import type { Member, Project, Task } from "../../shared/domain";
 export type State = {
   projects: Project[];
   tasks: Task[];
+  members: Member[];
   connections: {
     orbit: boolean;
+    orbitConfigured: boolean;
+    orbitError: string;
     sentry: boolean;
+    sentryMcp: boolean;
     amp: boolean;
     webhook: boolean;
     publicUrl: string;

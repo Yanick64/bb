@@ -3,12 +3,14 @@ import {
   type AgentReport,
   activeRun,
   currentPlan,
+  deliveryText,
   evidenceInput,
   planInput,
   questionInput,
   type Stage,
   signalInput,
   type Task,
+  timeInput,
 } from "../shared/domain";
 import { AppError, activity, id, now, type Store } from "./store";
 
@@ -27,6 +29,7 @@ export function invalidate(task: Task) {
   }
   task.review = null;
   task.delivery = null;
+  task.deliveryDraft = null;
   if (["in_progress", "review", "delivery", "done"].includes(task.stage)) task.stage = "planning";
 }
 export function addPlan(task: Task, input: unknown) {
@@ -50,6 +53,7 @@ export function addPlan(task: Task, input: unknown) {
   task.review = null;
   task.delivery = null;
   task.stage = "planning";
+  task.deliveryDraft = null;
   activity(task, `Plan v${task.plans.length} voorgesteld`);
 }
 export function addQuestion(task: Task, input: unknown) {
@@ -92,6 +96,7 @@ export function addEvidence(task: Task, input: unknown) {
     review: "pending",
     comments: [],
   });
+  task.deliveryDraft = null;
   task.review = null;
   task.delivery = null;
   if (currentPlan(task)?.approvedAt && !activeRun(task)) task.stage = "review";
@@ -160,7 +165,15 @@ export function applyReport(task: Task, report: AgentReport, mode: string) {
   for (const question of report.questions ?? [])
     if (!task.questions.some((q) => q.question === question.question)) addQuestion(task, question);
   if (report.plan && ["triage", "plan"].includes(mode)) addPlan(task, report.plan);
-  for (const evidence of report.evidence ?? []) addEvidence(task, evidence);
+  if (mode !== "delivery")
+    for (const evidence of report.evidence ?? []) addEvidence(task, evidence);
+  const plan = currentPlan(task);
+  if (report.deliveryDraft && plan && ["implement", "revise", "delivery"].includes(mode))
+    task.deliveryDraft = {
+      text: report.deliveryDraft,
+      planVersion: plan.version,
+      reviewCycle: task.reviewCycle,
+    };
   if (["implement", "revise"].includes(mode)) task.stage = "review";
 }
 export function ingest(store: Store, input: unknown, targetTaskId?: string) {
@@ -170,13 +183,28 @@ export function ingest(store: Store, input: unknown, targetTaskId?: string) {
       .signals()
       .find((s) => s.provider === data.provider && s.externalId === data.externalId);
     if (existing) return { task: store.task(existing.taskId), duplicate: true };
-    const matches = store
-      .projects()
-      .filter((p) =>
-        p.mappings.some(
-          (m) => m.provider === data.provider && m.externalId === data.externalProjectId,
-        ),
-      );
+    const projects = store.projects();
+    const clientMatches =
+      data.provider === "orbit" && data.externalClientId
+        ? projects.filter((p) =>
+            p.mappings.some(
+              (m) =>
+                m.provider === "orbit" &&
+                m.scope === "client" &&
+                m.externalId === data.externalClientId,
+            ),
+          )
+        : [];
+    const matches = clientMatches.length
+      ? clientMatches
+      : projects.filter((p) =>
+          p.mappings.some(
+            (m) =>
+              m.scope === "project" &&
+              m.provider === data.provider &&
+              m.externalId === data.externalProjectId,
+          ),
+        );
     const task = targetTaskId
       ? store.task(targetTaskId)
       : store.createTask(
@@ -203,6 +231,8 @@ export const taskCommand = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("summary"), summary: z.string().max(20000) }),
   z.object({ type: z.literal("assign"), projectId: z.string() }),
+  z.object({ type: z.literal("assignee"), memberId: z.string().nullable() }),
+  z.object({ type: z.literal("log_time"), entry: timeInput }),
   z.object({ type: z.literal("plan"), plan: planInput }),
   z.object({ type: z.literal("approve"), version: z.number().int().positive() }),
   z.object({ type: z.literal("question"), question: questionInput }),
@@ -227,7 +257,7 @@ export const taskCommand = z.discriminatedUnion("type", [
     y: z.number().min(0).max(100).optional(),
   }),
   z.object({ type: z.literal("accept_review"), revision: z.string().min(1) }),
-  z.object({ type: z.literal("deliver"), note: z.string().trim().min(1).max(10000) }),
+  z.object({ type: z.literal("deliver"), note: z.string().trim().max(10000).default("") }),
   z.object({ type: z.literal("message"), text: z.string().trim().min(1).max(20000) }),
   z.object({
     type: z.literal("resolve_run"),
@@ -244,8 +274,27 @@ export function command(store: Store, taskId: string, input: TaskCommand, revisi
       const lastRun = task.runs.at(-1);
       if (["plan", "evidence", "summary"].includes(cmd.type) && lastRun?.status === "succeeded")
         lastRun.error = null;
-      if (!["message", "annotate", "resolve_run"].includes(cmd.type)) requireIdle(task);
+      if (!["message", "annotate", "resolve_run", "assignee", "log_time"].includes(cmd.type))
+        requireIdle(task);
       switch (cmd.type) {
+        case "assignee":
+          if (cmd.memberId) store.member(cmd.memberId);
+          task.assigneeId = cmd.memberId;
+          activity(
+            task,
+            cmd.memberId
+              ? `Toegewezen aan ${store.member(cmd.memberId).name}`
+              : "Toewijzing verwijderd",
+          );
+          break;
+        case "log_time":
+          store.member(cmd.entry.memberId);
+          task.timeEntries.push({ ...cmd.entry, id: id(), createdAt: now() });
+          activity(
+            task,
+            `${cmd.entry.minutes} minuten vastgelegd voor ${store.member(cmd.entry.memberId).name}`,
+          );
+          break;
         case "stage":
           transition(task, cmd.stage);
           break;
@@ -271,6 +320,7 @@ export function command(store: Store, taskId: string, input: TaskCommand, revisi
         case "answer": {
           const question = task.questions.find((q) => q.id === cmd.questionId);
           if (!question) throw new AppError("Vraag niet gevonden", 404);
+          if (question.answer === cmd.answer && question.answeredBy === cmd.answeredBy) break;
           question.answer = cmd.answer;
           question.answeredBy = cmd.answeredBy;
           question.answeredAt = now();
@@ -285,6 +335,7 @@ export function command(store: Store, taskId: string, input: TaskCommand, revisi
           const evidence = task.evidence.find((e) => e.id === cmd.evidenceId);
           if (!evidence) throw new AppError("Bewijs niet gevonden", 404);
           evidence.review = cmd.decision;
+          if (cmd.decision === "changes_requested") task.deliveryDraft = null;
           task.review = null;
           task.delivery = null;
           if (["done", "delivery"].includes(task.stage)) task.stage = "review";
@@ -321,7 +372,7 @@ export function command(store: Store, taskId: string, input: TaskCommand, revisi
             throw new AppError("Accepteer eerst de actuele review", 409);
           if (task.questions.some((q) => !q.answer && q.blocks !== "none"))
             throw new AppError("Beantwoord eerst de blokkerende vragen", 409);
-          task.delivery = { note: cmd.note, deliveredAt: now() };
+          task.delivery = { note: cmd.note || deliveryText(task), deliveredAt: now() };
           task.stage = "done";
           activity(task, "Oplevering vastgelegd");
           break;

@@ -22,9 +22,10 @@ import {
   Settings2,
   Sparkles,
   Sun,
+  Users,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   activeRun,
   nextAction,
@@ -35,11 +36,17 @@ import {
 } from "../shared/domain";
 import { Empty, Field, Priority, SourceBadge } from "./components/common";
 import { Connections } from "./components/connections";
-import { NewTask } from "./components/new-task";
-import { ProjectDialog } from "./components/project-dialog";
-import { TaskDetail } from "./components/task-detail";
+import { Team } from "./components/team";
 import { Button } from "./components/ui/button";
 import { api, useAction, useFactory, useToast } from "./lib/api";
+
+const TaskDetail = lazy(() =>
+  import("./components/task-detail").then((m) => ({ default: m.TaskDetail })),
+);
+const ProjectDialog = lazy(() =>
+  import("./components/project-dialog").then((m) => ({ default: m.ProjectDialog })),
+);
+const NewTask = lazy(() => import("./components/new-task").then((m) => ({ default: m.NewTask })));
 
 export function App() {
   const auth = useQuery({
@@ -111,6 +118,7 @@ function Factory() {
   const [editProject, setEditProject] = useState<Project | "new" | null>(null);
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("all");
+  const [assignee, setAssignee] = useState("all");
   const [mobileNav, setMobileNav] = useState(false);
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   useEffect(() => {
@@ -151,6 +159,7 @@ function Factory() {
         if (view === "inbox" && task.stage !== "inbox") return false;
         if (view === "actions" && ["amp", "none"].includes(nextAction(task).owner)) return false;
         if (source !== "all" && task.source !== source) return false;
+        if (assignee !== "all" && (task.assigneeId ?? "unassigned") !== assignee) return false;
         return (
           !query ||
           `${task.title} ${task.description} BB-${task.number} ${task.summary}`
@@ -159,7 +168,7 @@ function Factory() {
         );
       }) ?? []
     );
-  }, [data?.tasks, project, view, source, search]);
+  }, [data?.tasks, project, view, source, search, assignee]);
   if (isPending)
     return (
       <div className="loading-screen">
@@ -192,13 +201,14 @@ function Factory() {
   const title =
     project?.name ??
     {
-      actions: "Mijn volgende acties",
+      actions: "Volgende acties",
+      team: "Team",
       inbox: "Inbox",
       all: "Alle taken",
       projects: "Projecten",
       connections: "Verbindingen",
     }[view] ??
-    "Mijn volgende acties";
+    "Volgende acties";
   const subtitle =
     project?.description ||
     {
@@ -207,6 +217,7 @@ function Factory() {
       all: "Al het werk, van eerste vraag tot oplevering.",
       projects: "Jouw projecten, met de bronnen die jij kiest.",
       connections: "Verbind de bronnen en tools van je werkruimte.",
+      team: "Verdeel het werk en houd de bezetting in beeld.",
     }[view];
   const navItems = [
     { key: "actions", label: "Volgende acties", Icon: ListChecks, count: actions },
@@ -217,6 +228,7 @@ function Factory() {
       count: data.tasks.filter((t) => t.stage === "inbox").length,
     },
     { key: "all", label: "Alle taken", Icon: LayoutGrid },
+    { key: "team", label: "Team", Icon: Users },
   ];
   return (
     <div className="app-shell">
@@ -228,7 +240,7 @@ function Factory() {
           onClick={() => setMobileNav(false)}
         />
       ) : null}
-      <aside className={`sidebar ${mobileNav ? "sidebar-open" : ""}`}>
+      <aside id="workspace-navigation" className={`sidebar ${mobileNav ? "sidebar-open" : ""}`}>
         <a
           className="brand"
           href="/"
@@ -244,9 +256,9 @@ function Factory() {
           </div>
         </a>
         <div className="workspace-label">
-          <span className="workspace-avatar">Y</span>
-          <span>Yanick's werkruimte</span>
-          <span className="badge tiny">Persoonlijk</span>
+          <span className="workspace-avatar">2D</span>
+          <span>2DIGITS studio</span>
+          <span className="badge tiny">Development</span>
         </div>
         <nav aria-label="Hoofdnavigatie">
           <p className="nav-label">WERKRUIMTE</p>
@@ -339,6 +351,8 @@ function Factory() {
             size="icon"
             className="mobile-menu"
             aria-label="Menu openen"
+            aria-expanded={mobileNav}
+            aria-controls="workspace-navigation"
             onClick={() => setMobileNav(true)}
           >
             <Menu size={19} />
@@ -354,7 +368,7 @@ function Factory() {
               month: "long",
             }).format(new Date())}
           </span>
-          <span className="user-avatar">Y</span>
+          <span className="user-avatar">2D</span>
         </div>
         <header className="page-header">
           <div className="page-heading">
@@ -395,9 +409,11 @@ function Factory() {
                             created: number;
                             duplicate: number;
                             limited: boolean;
+                            errors: { source: string; message: string }[];
                           };
                           toast(
-                            `${r.created} nieuwe taken, ${r.duplicate} al bekend.${r.limited ? " De bron begrenst deze lijst; niet alle items zijn opgehaald." : ""}`,
+                            `${r.created} nieuwe taken, ${r.duplicate} al bekend.${r.limited ? " De bron begrenst deze lijst; niet alle items zijn opgehaald." : ""}${r.errors?.length ? ` ${r.errors.map((error) => `${error.source}: ${error.message}`).join(" ")}` : ""}`,
+                            Boolean(r.errors?.length),
                           );
                         },
                       },
@@ -414,7 +430,7 @@ function Factory() {
                 <Plus size={16} />
                 Nieuw project
               </Button>
-            ) : view !== "connections" ? (
+            ) : !["connections", "team"].includes(view) ? (
               <Button onClick={() => setNewTask(true)}>
                 <Plus size={16} />
                 Nieuwe taak
@@ -422,7 +438,9 @@ function Factory() {
             ) : null}
           </div>
         </header>
-        {view === "connections" ? (
+        {view === "team" ? (
+          <Team members={data.members} tasks={data.tasks} />
+        ) : view === "connections" ? (
           <Connections state={data} />
         ) : view === "projects" ? (
           <div className="page-body">
@@ -471,7 +489,7 @@ function Factory() {
           <>
             {view === "actions" ? (
               <div className="stats-row">
-                <Stat label="Jij bent aan zet" value={actions} Icon={ArrowRight} tone="orange" />
+                <Stat label="Team is aan zet" value={actions} Icon={ArrowRight} tone="orange" />
                 <Stat label="Wacht op de klant" value={waiting} Icon={CircleHelp} tone="purple" />
                 <Stat label="Amp aan het werk" value={running} Icon={Boxes} tone="blue" />
                 <Stat
@@ -546,6 +564,19 @@ function Factory() {
                     <option value="manual">Handmatig</option>
                     <option value="email">E-mail</option>
                   </select>
+                  <select
+                    aria-label="Filter op developer"
+                    value={assignee}
+                    onChange={(e) => setAssignee(e.target.value)}
+                  >
+                    <option value="all">Alle developers</option>
+                    <option value="unassigned">Niet toegewezen</option>
+                    {data.members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
                   <span className="spacer" />
                   <span className="muted small">{filtered.length} taken</span>
                 </div>
@@ -573,6 +604,7 @@ function Factory() {
                               <TaskCard
                                 key={task.id}
                                 task={task}
+                                assignee={data.members.find((m) => m.id === task.assigneeId)?.name}
                                 onOpen={() => openTask(task.id)}
                               />
                             ))}
@@ -608,6 +640,11 @@ function Factory() {
                                   BB-{String(task.number).padStart(3, "0")}
                                 </span>
                                 <strong>{task.title}</strong>
+                                {task.assigneeId ? (
+                                  <span className="badge">
+                                    {data.members.find((m) => m.id === task.assigneeId)?.name}
+                                  </span>
+                                ) : null}
                                 <SourceBadge source={task.source} />
                               </span>
                               <span className="task-row-project">
@@ -651,29 +688,38 @@ function Factory() {
           <span>Elke taak een duidelijke volgende stap.</span>
         </footer>
       </main>
-      {newTask ? (
-        <NewTask
-          projects={data.projects}
-          projectId={project?.id}
-          onClose={() => setNewTask(false)}
-          onCreated={(task) => openTask(task.id)}
-        />
-      ) : null}
-      {editProject ? (
-        <ProjectDialog
-          project={editProject === "new" ? undefined : editProject}
-          onClose={() => setEditProject(null)}
-        />
-      ) : null}
-      {selected ? (
-        <TaskDetail
-          key={selected.id}
-          task={selected}
-          projects={data.projects}
-          ampEnabled={data.connections.amp}
-          onClose={() => openTask(null)}
-        />
-      ) : null}
+      <Suspense
+        fallback={
+          <div className="toast" role="status">
+            Onderdeel openen…
+          </div>
+        }
+      >
+        {newTask ? (
+          <NewTask
+            projects={data.projects}
+            projectId={project?.id}
+            onClose={() => setNewTask(false)}
+            onCreated={(task) => openTask(task.id)}
+          />
+        ) : null}
+        {editProject ? (
+          <ProjectDialog
+            project={editProject === "new" ? undefined : editProject}
+            onClose={() => setEditProject(null)}
+          />
+        ) : null}
+        {selected ? (
+          <TaskDetail
+            key={selected.id}
+            task={selected}
+            projects={data.projects}
+            ampEnabled={data.connections.amp}
+            members={data.members}
+            onClose={() => openTask(null)}
+          />
+        ) : null}
+      </Suspense>
     </div>
   );
 }
@@ -700,7 +746,15 @@ function Stat({
     </div>
   );
 }
-function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
+function TaskCard({
+  task,
+  assignee,
+  onOpen,
+}: {
+  task: Task;
+  assignee?: string;
+  onOpen: () => void;
+}) {
   const next = nextAction(task);
   const run = activeRun(task);
   const questions = task.questions.filter((q) => !q.answer).length;
@@ -715,6 +769,7 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
       {task.summary ? <p className="card-summary">{task.summary}</p> : null}
       <div className="row wrap">
         <SourceBadge source={task.source} />
+        {assignee ? <span className="badge">{assignee}</span> : null}
         {questions ? (
           <span className="question-count">
             <CircleHelp size={12} />

@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Check,
   ClipboardList,
+  Clock,
   FileText,
   History,
   MessageCircle,
@@ -14,6 +15,8 @@ import type { TaskCommand } from "../../server/workflow";
 import {
   activeRun,
   currentPlan,
+  deliveryText,
+  type Member,
   nextAction,
   type Project,
   type Run,
@@ -26,19 +29,22 @@ import { api, useAction, useToast } from "../lib/api";
 import { ExternalLink, Field, Priority, relativeDate, SourceBadge } from "./common";
 import { QuestionsPanel } from "./task-questions";
 import { ReviewPanel } from "./task-review";
+import { TaskTime } from "./task-time";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 
 export type SendCommand = (command: TaskCommand, onSuccess?: () => void) => void;
-type Tab = "overview" | "questions" | "plan" | "review" | "activity";
+type Tab = "overview" | "questions" | "plan" | "review" | "time" | "activity";
 export function TaskDetail({
   task,
   projects,
+  members,
   ampEnabled,
   onClose,
 }: {
   task: Task;
   projects: Project[];
+  members: Member[];
   ampEnabled: boolean;
   onClose: () => void;
 }) {
@@ -139,6 +145,7 @@ export function TaskDetail({
             ],
             ["plan", "Plan", ClipboardList],
             ["review", "Review", Check],
+            ["time", "Tijd", Clock],
             ["activity", "Activiteit", History],
           ] as const
         ).map(([key, label, Icon]) => (
@@ -153,7 +160,7 @@ export function TaskDetail({
             key={key}
             onClick={() => setTab(key)}
             onKeyDown={(event) => {
-              const tabs: Tab[] = ["overview", "questions", "plan", "review", "activity"];
+              const tabs: Tab[] = ["overview", "questions", "plan", "review", "time", "activity"];
               const index = tabs.indexOf(key);
               const target =
                 event.key === "ArrowRight"
@@ -185,6 +192,20 @@ export function TaskDetail({
       >
         {tab === "overview" ? (
           <div className="stack">
+            <Field label="Toegewezen aan">
+              <select
+                value={task.assigneeId ?? ""}
+                disabled={action.isPending}
+                onChange={(e) => send({ type: "assignee", memberId: e.target.value || null })}
+              >
+                <option value="">Niet toegewezen</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
             {!task.projectId ? (
               <section className="panel">
                 <Field label="Kies het BB-project">
@@ -235,7 +256,7 @@ export function TaskDetail({
               }}
             >
               <div className="section-heading">
-                <h3>Triage</h3>
+                <h3>Onderzoek en resultaat</h3>
                 <Button
                   type="button"
                   variant="secondary"
@@ -244,7 +265,7 @@ export function TaskDetail({
                   onClick={() => requestRun("triage")}
                 >
                   <Play size={13} />
-                  Laat Amp onderzoeken
+                  {task.runs.length ? "Vervolg onderzoek" : "Laat Amp onderzoeken"}
                 </Button>
               </div>
               <textarea
@@ -273,14 +294,27 @@ export function TaskDetail({
                 }}
               >
                 <h3>Oplevering</h3>
-                <p className="muted">Leg vast wat je hebt geleverd, aan wie en via welk kanaal.</p>
+                <p className="muted">
+                  BB maakt dit concept uit het resultaat. Controleer de tekst en pas die aan als dat
+                  nodig is. Vastleggen verstuurt geen klantbericht.
+                </p>
                 <textarea
                   name="note"
+                  aria-label="Oplevertekst"
+                  key={deliveryText(task)}
+                  defaultValue={deliveryText(task)}
                   required
-                  rows={3}
-                  placeholder="Bijvoorbeeld: wijziging live gezet en klant geïnformeerd via Orbit-ticket…"
+                  rows={8}
                 />
-                <Button disabled={action.isPending}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={action.isPending || Boolean(run)}
+                  onClick={() => requestRun("delivery")}
+                >
+                  Laat Amp het opleverconcept verfijnen
+                </Button>
+                <Button disabled={action.isPending || Boolean(run)}>
                   <Check size={15} />
                   Oplevering vastleggen
                 </Button>
@@ -335,7 +369,12 @@ export function TaskDetail({
           </div>
         ) : null}
         {tab === "questions" ? (
-          <QuestionsPanel task={task} send={send} pending={action.isPending || Boolean(run)} />
+          <QuestionsPanel
+            task={task}
+            send={send}
+            pending={action.isPending || Boolean(run)}
+            ampEnabled={ampEnabled}
+          />
         ) : null}
         {tab === "plan" ? (
           <div className="stack">
@@ -447,12 +486,26 @@ export function TaskDetail({
           </div>
         ) : null}
         {tab === "review" ? (
-          <ReviewPanel
-            task={task}
-            send={send}
-            pending={action.isPending || Boolean(run)}
-            onRevise={() => requestRun("revise")}
-          />
+          <div className="stack">
+            {task.stage === "review" ? (
+              <Button
+                variant="secondary"
+                disabled={action.isPending || Boolean(run)}
+                onClick={() => requestRun("review")}
+              >
+                Laat Amp technisch reviewen
+              </Button>
+            ) : null}
+            <ReviewPanel
+              task={task}
+              send={send}
+              pending={action.isPending || Boolean(run)}
+              onRevise={() => requestRun("revise")}
+            />
+          </div>
+        ) : null}
+        {tab === "time" ? (
+          <TaskTime task={task} members={members} send={send} pending={action.isPending} />
         ) : null}
         {tab === "activity" ? (
           <div className="stack">

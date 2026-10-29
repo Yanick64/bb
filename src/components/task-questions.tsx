@@ -17,10 +17,12 @@ export function QuestionsPanel({
   task,
   send,
   pending,
+  ampEnabled,
 }: {
   task: Task;
   send: SendCommand;
   pending: boolean;
+  ampEnabled: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
@@ -31,7 +33,11 @@ export function QuestionsPanel({
       <div className="section-heading">
         <div>
           <h2>Vragen & beslissingen</h2>
-          <p className="muted">Maak onduidelijkheden concreet voordat het werk verdergaat.</p>
+          <p className="muted">
+            {ampEnabled && task.runs.at(-1)?.status === "succeeded"
+              ? "Na het laatste blokkerende antwoord gaat Amp automatisch verder. Een gewijzigd plan vraagt opnieuw jouw goedkeuring."
+              : "Maak onduidelijkheden concreet voordat het werk verdergaat."}
+          </p>
         </div>
         <Button size="sm" variant="secondary" onClick={() => setAdding(true)} disabled={pending}>
           <Plus size={14} />
@@ -43,10 +49,10 @@ export function QuestionsPanel({
           variant="secondary"
           onClick={() =>
             setDraft(
-              `Hallo,\n\nVoor "${task.title}" heb ik nog een paar vragen:\n\n${open
+              open
                 .filter((q) => q.recipient === "client")
-                .map((q, i) => `${i + 1}. ${q.question}${q.reason ? `\n   ${q.reason}` : ""}`)
-                .join("\n\n")}\n\nMet deze antwoorden kan ik verder met de volgende stap.`,
+                .map((q, i) => `${i + 1}. ${q.question}`)
+                .join("\n\n"),
             )
           }
         >

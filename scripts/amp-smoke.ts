@@ -1,7 +1,6 @@
 import { resolve } from "node:path";
-import { AmpWorker, enqueue } from "../server/amp";
+import { AmpWorker, commandAndContinue, enqueue } from "../server/amp";
 import { Store } from "../server/store";
-import { command } from "../server/workflow";
 import { projectInput, type Task } from "../shared/domain";
 
 // Explicit, opt-in live test. It creates one remote orb and runs two short turns.
@@ -13,7 +12,7 @@ const task = store.createTask({
   projectId: project.id,
   kind: "question",
   description:
-    "Synthetic integration test. Do not call any tools, read repositories, contact anyone, or change any files. Only return the requested JSON.",
+    'Synthetic integration test. Do not call any tools, read repositories, contact anyone, or change any files. Only return JSON. After the operator answers Ja to the synthetic question, return {"summary":"Antwoord ontvangen in dezelfde thread.","plan":{"summary":"Synthetische test afgerond","steps":["Controleer de ontvangst van het antwoord"],"criteria":["Het antwoord is ontvangen"]}} without asking further questions. This synthetic test has no client, budget or billing.',
 });
 const worker = new AmpWorker(store, {
   enabled: true,
@@ -56,7 +55,7 @@ try {
   const firstThread = current.runs[0].threadId;
   if (!firstThread || !current.questions.length)
     throw new Error("Missing remote thread or structured question");
-  current = command(
+  current = commandAndContinue(
     store,
     task.id,
     {
@@ -66,14 +65,10 @@ try {
       answeredBy: "operator",
     },
     current.revision,
+    true,
   );
-  enqueue(
-    store,
-    task.id,
-    "plan",
-    'Return exactly {"summary":"Antwoord ontvangen in dezelfde thread.","plan":{"summary":"Synthetische test afgerond","steps":["Controleer de ontvangst van het antwoord"],"criteria":["Het antwoord is ontvangen"]}}. No tools or external actions.',
-    current.revision,
-  );
+  if (current.runs.length !== 2 || current.runs[1].status !== "queued")
+    throw new Error("The final answer did not automatically queue continuation");
   worker.tick();
   current = await waitForTurn();
   if (current.runs[1].threadId !== firstThread || !current.plans.length)

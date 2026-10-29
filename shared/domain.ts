@@ -28,16 +28,24 @@ export const httpUrl = z
   .url()
   .refine((v) => /^https?:\/\//.test(v), "Gebruik een http- of https-URL");
 const optionalUrl = z.union([httpUrl, z.literal("")]).default("");
-export const mappingSchema = z.object({
-  provider: z.enum(["orbit", "sentry"]),
-  externalId: text.max(200),
-  name: text.max(500),
-  client: z.string().max(300).default(""),
-});
+export const mappingSchema = z
+  .object({
+    provider: z.enum(["orbit", "sentry"]),
+    scope: z.enum(["project", "client"]).default("project"),
+    externalId: text.max(200),
+    name: text.max(500),
+    client: z.string().max(300).default(""),
+  })
+  .refine(
+    (mapping) =>
+      mapping.scope !== "client" ||
+      (mapping.provider === "orbit" && /^CL[A-Z0-9]{13}$/.test(mapping.externalId)),
+    "Kies een Orbit-klant met een geldig CL-api_id",
+  );
 export const projectInput = z.object({
   name: text.max(120),
   description: z.string().max(4000).default(""),
-  color: z.enum(["orange", "blue", "purple", "green", "rose"]).default("orange"),
+  color: z.enum(["orange", "blue", "purple", "green", "rose"]).default("purple"),
   ampProject: z
     .string()
     .max(300)
@@ -49,6 +57,34 @@ export const projectInput = z.object({
 });
 export type ProjectInput = z.infer<typeof projectInput>;
 export type Project = ProjectInput & { id: string; createdAt: string; demo: boolean };
+export type Member = { id: string; name: string };
+export const billingLabels = {
+  unclassified: "Nog te beoordelen",
+  new_business: "New business · intern",
+  existing_business: "Uitbreiding · klant",
+  delivery: "Lopende opdracht · klant",
+  paid_preparation: "Afgesproken betaalde voorbereiding",
+} as const;
+export const timeInput = z
+  .object({
+    memberId: z.string().min(1),
+    minutes: z.number().int().min(1).max(1440),
+    date: z.iso.date(),
+    description: text.max(2000),
+    billing: z.enum([
+      "unclassified",
+      "new_business",
+      "existing_business",
+      "delivery",
+      "paid_preparation",
+    ]),
+    agreement: z.string().trim().max(2000).default(""),
+  })
+  .refine(
+    (entry) => entry.billing !== "paid_preparation" || Boolean(entry.agreement),
+    "Leg de afspraak over betaalde voorbereiding vast",
+  );
+export type TimeEntry = z.infer<typeof timeInput> & { id: string; createdAt: string };
 export const taskInput = z.object({
   title: text.max(240),
   description: z.string().max(20000).default(""),
@@ -124,6 +160,7 @@ export const signalInput = z.object({
   provider: sourceSchema.exclude(["manual"]),
   externalId: text.max(300),
   externalProjectId: z.string().max(300).default(""),
+  externalClientId: z.string().max(300).default(""),
   title: text.max(240),
   body: z.string().max(50000).default(""),
   url: optionalUrl,
@@ -138,7 +175,7 @@ export type Run = {
   projectId: string;
   ampProject: string;
   id: string;
-  mode: "triage" | "plan" | "implement" | "revise";
+  mode: "triage" | "plan" | "implement" | "revise" | "review" | "delivery";
   status: "queued" | "running" | "succeeded" | "failed" | "interrupted";
   threadId: string | null;
   planVersion: number | null;
@@ -149,6 +186,9 @@ export type Run = {
   result: string;
 };
 export type Task = z.infer<typeof taskInput> & {
+  assigneeId: string | null;
+  timeEntries: TimeEntry[];
+  deliveryDraft: { text: string; planVersion: number; reviewCycle: number } | null;
   reviewCycle: number;
   id: string;
   number: number;
@@ -176,6 +216,32 @@ export type Action = {
 };
 export function currentPlan(task: Task) {
   return task.plans.at(-1);
+}
+export function deliveryText(task: Task): string {
+  const plan = currentPlan(task);
+  const draft = task.deliveryDraft;
+  if (draft && draft.planVersion === plan?.version && draft.reviewCycle === task.reviewCycle)
+    return draft.text;
+  const evidence = task.evidence.filter(
+    (e) =>
+      e.review === "accepted" &&
+      e.planVersion === task.review?.planVersion &&
+      e.revision === task.review?.revision &&
+      e.reviewCycle === task.reviewCycle,
+  );
+  return [
+    `Het resultaat voor "${task.title}" is beoordeeld.`,
+    evidence.length
+      ? `Gecontroleerd:\n${[...new Set(evidence.map((e) => e.criterion || e.title))].map((line) => `• ${line}`).join("\n")}`
+      : "",
+    evidence
+      .filter((e) => e.url && e.kind !== "screenshot")
+      .map((e) => `${e.title}: ${e.url}`)
+      .join("\n"),
+    "Volgende stap: bevestig de overdracht en, als er code is aangepast, de livegang. BB heeft geen klantbericht verstuurd.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 export function activeRun(task: Task) {
   return task.runs.find(
@@ -264,7 +330,7 @@ export function nextAction(task: Task): Action {
     return {
       owner: "operator",
       label: "Lever het resultaat op",
-      detail: "Leg vast wat je hebt geleverd en aan wie.",
+      detail: "Controleer het opleverconcept dat BB uit het resultaat heeft gemaakt.",
       tab: "overview",
     };
   if (task.stage === "review")
@@ -298,6 +364,7 @@ export function nextAction(task: Task): Action {
 }
 export const agentReport = z.object({
   summary: z.string().max(20000).optional(),
+  deliveryDraft: z.string().trim().min(1).max(10000).optional(),
   questions: z.array(questionInput).max(30).optional(),
   plan: planInput.optional(),
   evidence: z.array(evidenceInput).max(50).optional(),
