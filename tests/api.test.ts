@@ -9,7 +9,7 @@ import { processReceipt, receive, verifyWebhook } from "../server/webhooks";
 import { projectInput, type Task } from "../shared/domain";
 
 const stores: Store[] = [];
-function setup(password?: string) {
+function setup(password?: string, publicUrl?: string) {
   const store = new Store();
   stores.push(store);
   const connectors = new Connectors({ sentryUrl: "https://sentry.io" });
@@ -17,6 +17,7 @@ function setup(password?: string) {
     dataDir: "./data/test",
     ampEnabled: false,
     password,
+    publicUrl,
     webhookSecret: "test-webhook-secret",
   });
   const request = (path: string, body?: unknown, headers: Record<string, string> = {}) =>
@@ -52,6 +53,38 @@ test("API enforces auth, sets an httpOnly cookie and rejects cross-origin writes
 test("rejects DNS rebinding hostnames", async () => {
   const { app } = setup();
   expect((await app.request("http://evil.example/api/state")).status).toBe(403);
+});
+test("HTTPS public origin works behind an HTTP reverse proxy with secure login cookies", async () => {
+  const { app } = setup("test-password", "https://preview.example");
+  const auth = await app.request("http://preview.example/api/auth");
+  expect(auth.status).toBe(200);
+  expect(await auth.json()).toEqual({ required: true, authenticated: false });
+  const login = await app.request("http://preview.example/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "https://preview.example" },
+    body: JSON.stringify({ password: "test-password" }),
+  });
+  expect(login.status).toBe(200);
+  const cookie = login.headers.get("set-cookie") ?? "";
+  expect(cookie).toContain("Secure");
+  expect(
+    (await app.request("http://preview.example/api/state", { headers: { cookie } })).status,
+  ).toBe(200);
+  expect((await app.request("http://preview.example:9999/api/auth")).status).toBe(403);
+  expect(
+    (
+      await app.request("http://evil.example/api/auth", {
+        headers: { "X-Forwarded-Host": "preview.example" },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await app.request("http://preview.example/api/auth", {
+        headers: { Origin: "https://evil.example" },
+      })
+    ).status,
+  ).toBe(403);
 });
 test("full HTTP lifecycle from manual intake to delivery", async () => {
   const { request } = setup();

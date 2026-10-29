@@ -4,11 +4,13 @@ Updated 29 October 2026.
 
 ## Verified
 
-- Strict typecheck, Biome, 30 tests and production build pass locally.
-- The first pushed commit passed the GitHub Actions check job.
+- Strict typecheck, Biome, 31 tests and production build pass locally.
+- Commit `50342b5` passed the [GitHub Actions check job](https://github.com/Yanick64/bb/actions/runs/40917733392).
 - Browser walkthrough completed on synthetic data: client question, answer, plan creation, approval, screenshot upload, positioned annotation, evidence acceptance, review acceptance and recorded delivery.
 - The desktop action queue passes the automated WCAG 2 A/AA axe checks with zero violations.
 - Live Amp integration completed two remote turns in one thread: structured question, human answer and a structured unapproved plan. This was a repo-less smoke test, not a claim that customer code was modified or deployed.
+- A repository-backed orb checked commit `50342b5` with Bun 1.4.4. Its typecheck, lint, 30 tests and production build passed. It rendered the synthetic Studio Noord demo and attached an actual PNG, which BB downloaded into local storage with `amp files get`.
+- That orb exposed a reverse-proxy bug: BB compared the internal HTTP origin against the configured HTTPS origin and returned 403. The fix checks the exact configured host and port, retains Origin validation and sets secure cookies for configured HTTPS hosting. A regression test covers login and rejection of unexpected hosts, ports and origins. Live Portal verification is being repeated.
 - Actual Orbit `ListProjects`, `ListTickets` and `GetTicketDetail` response shapes were inspected read-only. A local catalog of 343 open/draft projects was imported through the local operator API. Only IDs, names and client names were retained. No catalog or customer data is tracked in Git.
 
 ## Ready to use locally
@@ -27,7 +29,7 @@ The demo project and QA changes are synthetic. They are labelled as examples and
 
 ## Follow-up work
 
-- Verify a real coding task in a disposable repository, including a preview, private screenshot import and draft PR. The current smoke test proves orchestration and continuation, not those outputs.
+- Verify a code-changing task and draft PR in a disposable repository. Repository builds and private screenshot import have been verified; the Portal retest is pending.
 - Add full source pagination, reconciliation, connection health checks and durable rate-limit checkpoints. Current sync is a bounded manual import; webhooks handle new ticket arrival.
 - Add webhook receipt archival and run-event retention before sustained use.
 - Add Gmail intake, reply-to-task association and client/project routing rules. Email remains a planned source.

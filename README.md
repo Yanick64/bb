@@ -117,6 +117,6 @@ Backups are written under `data/backups/`. Copy them to your own backup storage.
 bun run check
 ```
 
-This runs strict TypeScript, Biome, 30 tests and a production build. GitHub Actions runs the same checks. Tests cover routing, deduplication, exact-plan approvals, clarification, stale evidence, delivery, authenticated webhooks, MCP project boundaries, persistence and worker disconnection.
+This runs strict TypeScript, Biome, 31 tests and a production build. GitHub Actions runs the same checks. Tests cover routing, deduplication, exact-plan approvals, clarification, stale evidence, delivery, authenticated webhooks, HTTPS reverse proxies, MCP project boundaries, persistence and worker disconnection.
 
 See [verification and remaining work](docs/status.md) and [architecture](docs/architecture.md).

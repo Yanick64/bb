@@ -32,6 +32,7 @@ export type AppConfig = {
 };
 export function createApp(store: Store, connectors: Connectors, config: AppConfig) {
   const app = new Hono();
+  const publicUrl = config.publicUrl ? new URL(config.publicUrl) : null;
   const sessionSecret = store.setting("session_secret") ?? randomBytes(32).toString("hex");
   store.setSetting("session_secret", sessionSecret);
   const signature = (value: string) =>
@@ -52,9 +53,11 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
   );
   app.use("*", async (c, next) => {
     const url = new URL(c.req.url);
-    const publicOrigin = config.publicUrl ? new URL(config.publicUrl).origin : null;
+    const publicOrigin = publicUrl?.origin;
+    // TLS may terminate at a proxy. Match the configured host and port without
+    // trusting client-supplied forwarded headers or the internal HTTP scheme.
     const allowed =
-      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || url.origin === publicOrigin;
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || url.host === publicUrl?.host;
     if (!allowed) return c.json({ error: "Host niet toegestaan. Stel BB_PUBLIC_URL in." }, 403);
     const origin = c.req.header("origin");
     if (
@@ -101,7 +104,7 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     setCookie(c, "bb_session", `${expires}.${signature(expires)}`, {
       httpOnly: true,
       sameSite: "Strict",
-      secure: new URL(c.req.url).protocol === "https:",
+      secure: publicUrl?.protocol === "https:" || new URL(c.req.url).protocol === "https:",
       path: "/",
       maxAge: 7 * 86400,
     });
