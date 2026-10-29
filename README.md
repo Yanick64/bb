@@ -1,8 +1,8 @@
 # 2DIGITS development workbench
 
-A personal workbench for incoming tickets, Sentry issues and manual requests. Start with a task list, read the original request and conversation, then investigate, approve, implement and review. Project boards remain available. The interface is in Dutch; the repository and internal task IDs retain the BB name.
+A personal workbench for Teamleader Orbit tickets, Sentry issues, Google Mail conversations and manual requests. Projects open as kanban boards. Read the original request, investigate, approve a plan, implement and review. The interface is in Dutch; the repository and internal task IDs retain the BB name.
 
-![Personal task list](docs/screenshots/workbench-list.png)
+![Project kanban board](docs/screenshots/workbench-board.png)
 
 ## Run it
 
@@ -39,7 +39,8 @@ Open http://127.0.0.1:4310. Run one BB server per data directory.
 - Review criteria, screenshots with positioned comments, previews, PR links, documents and actual check-status fields. Old evidence cannot authorize a new execution cycle.
 - Explicit human review and delivery. A customer question can end in a reviewed answer without creating a PR.
 - An editable delivery draft generated from actual results, with a reviewed-evidence fallback. Recording delivery does not send a client message or deploy code.
-- Personal time records with internal/client classification and agreement notes. Existing time history remains readable.
+- Project AI context, customer communication preferences and optional instructions for each workflow step. Amp receives general guidance plus only the active step's instructions.
+- Google Mail search with pagination, project selection and one deduplicated task per conversation.
 - Read-only Orbit/Sentry intake, stable source-ID deduplication and a persistent Orbit webhook inbox.
 - A project-scoped BB MCP endpoint for task context, questions, proposed plans and evidence.
 - Responsive layout, light/dark themes, keyboard-accessible dialogs and live updates.
@@ -85,7 +86,9 @@ The CLI's structured final report works without this callback connection. A Tail
 
 ### Teamleader Orbit
 
-Set `ORBIT_MCP_URL` to your **Streamable HTTP MCP endpoint** and `ORBIT_MCP_TOKEN` to a bearer credential accepted by that endpoint. The official endpoint is `https://api.orbit.teamleader.eu/mcp` and uses OAuth. BB's Orbit adapter currently accepts a bearer token only; it does not refresh Orbit OAuth tokens. A token from a gateway must use that gateway's matching URL. Use **Verbinding controleren** to verify access. A coding assistant's MCP access does not automatically give BB credentials.
+Set `ORBIT_MCP_URL=https://api.orbit.teamleader.eu/mcp`. In **Verbindingen**, choose **Aanmelden** on Teamleader Orbit and sign in with an account that has MCP read access. BB registers an OAuth client and stores access and refresh tokens in private SQLite settings. The callback is `http://localhost:4310/api/orbit/oauth/callback`, or the same path on `BB_PUBLIC_URL`. State expires after ten minutes and is consumed once; the SDK handles PKCE and token refresh.
+
+The official MCP endpoint uses OAuth rather than a static API key. `ORBIT_MCP_TOKEN` only applies to a custom gateway and must match that gateway's URL. Use **Verbinding controleren** to verify access. The coding assistant's MCP authorization does not automatically authorize BB.
 
 Set `ORBIT_WEB_URL` to your tenant's web origin for ticket links. Open project settings, search Orbit and select clients. **Bronnen ophalen** imports active tickets, at most 100 per selected client. Each import reads ticket details and up to 100 conversation entries, including internal notes, and enriches previously imported tickets. Empty description fields fall back to the first customer-visible message. Markup is converted to plain text. Download URLs expire; refresh the ticket context to renew them.
 
@@ -95,7 +98,7 @@ BB also supports a local client-catalog snapshot, labelled with its capture date
 
 ### Sentry
 
-Set `SENTRY_MCP_URL=https://mcp.sentry.dev/mcp`, `SENTRY_ORG` and `SENTRY_BASE_URL` for your region. In **Verbindingen**, choose **Verbind Sentry via MCP** and finish the Sentry login. BB stores its own OAuth tokens in private SQLite settings. State expires after ten minutes, is consumed once, and the SDK uses PKCE and token refresh. Concurrent credential operations are rejected rather than racing. Select the relevant Sentry projects in project settings, then fetch sources.
+Set `SENTRY_MCP_URL=https://mcp.sentry.dev/mcp`, `SENTRY_ORG` and `SENTRY_BASE_URL` for your region. In **Verbindingen**, choose **Aanmelden** on Sentry and finish the login. BB stores its own OAuth tokens in private SQLite settings. State expires after ten minutes, is consumed once, and the SDK uses PKCE and token refresh. Concurrent credential operations are rejected rather than racing. Select the relevant Sentry projects in project settings, then fetch sources.
 
 The callback is `${BB_PUBLIC_URL}/api/sentry/oauth/callback`, or `http://localhost:4310/api/sentry/oauth/callback` locally. Changing the origin requires a fresh connection. Optional `SENTRY_AUTH_TOKEN` enables REST fallback. Both adapters use organization plus issue short ID for deduplication. MCP synchronization imports unresolved issues active in the past seven days, up to 100 per project.
 
@@ -103,9 +106,33 @@ Intake currently imports a bounded window of unresolved issues, at most 100 per 
 
 Requested triage and planning refresh `get_sentry_resource` and `search_issue_events` through MCP. The issue snapshot and ten recent events from the past seven days accompany the Amp prompt. Amp investigates relevant stack frames, releases, environments and linked events. Orbit research instead starts from the customer question and conversation; manual work first distinguishes a reported defect from a request or question.
 
-### Orbit webhooks
+### Google Mail
+
+BB starts a separate read-only `workspace-mcp` stdio connection using the same local Google client configuration and cached authorization as your Google Workspace MCP. Install `uvx` and authorize the account through Google Workspace MCP first. Create a private `data/google-workspace.json`:
+
+```json
+{
+  "command": ["uvx", "workspace-mcp", "--tools", "gmail", "--read-only"],
+  "environment": {
+    "GOOGLE_OAUTH_CLIENT_ID": "YOUR_GOOGLE_CLIENT_ID",
+    "GOOGLE_OAUTH_CLIENT_SECRET": "YOUR_GOOGLE_CLIENT_SECRET"
+  }
+}
+```
+
+Copy the command and required environment from your existing local MCP configuration, preserving any authorization-related settings it needs. Set `GOOGLE_WORKSPACE_CONFIG=./data/google-workspace.json` and `GOOGLE_WORKSPACE_EMAIL` in `.env`, restrict the JSON file to its owner and restart the full dev process. Tokens are not exported through chat tools or stored in Git.
+
+Open **Google Mail**, search with Gmail operators, choose a destination and select **Maak taak**. Each account/thread pair produces at most one task. Reimport enriches the existing task without moving it to another project. Search returns up to 20 messages per page, deduplicated into conversations. Next/previous pagination preserves the search. The imported conversation is capped at 150,000 characters and shows a warning when truncated. Attachments remain in Google Mail. No sending or mailbox mutation is exposed.
+
+### Project AI guidance
+
+Project settings contain **AI-context** for product knowledge, technical agreements and constraints, plus **Klantcommunicatie** for language, tone and preferences. Optional per-step instructions cover investigation, planning, implementation, revisions, technical review and delivery. Existing projects receive empty defaults. Guidance applies to subsequent runs; it cannot remove approval or review requirements.
+
+### Teamleader Orbit webhooks
 
 BB accepts `POST /api/webhooks/orbit`, authenticated with `BB_ORBIT_WEBHOOK_SECRET`. See [the payload and forwarding guide](docs/webhooks.md).
+
+Set `BB_WEBHOOK_URL` to the full HTTPS webhook URL when exposing only this route through Tailscale Funnel. The public host is permitted only for webhook POST requests. The UI and OAuth callbacks remain local. **Verbinding controleren** sends an authenticated challenge without creating a receipt or task.
 
 An existing webhook receiver must forward to BB, or the sender must be pointed at BB's endpoint. Merely having the existing receiver's URL does not subscribe BB to its events. No existing receiver has been modified.
 
@@ -116,7 +143,7 @@ An existing webhook receiver must forward to BB, or the sender must be pointed a
 - Loopback access is the default. A non-loopback bind or configured public origin requires `BB_PASSWORD`.
 - Public hosting needs HTTPS and a persistent disk. The current app is single-operator, not a multi-tenant SaaS.
 - Keep one server per workspace database. The UI is intended for personal use.
-- Time entries record actual developer minutes locally. They are not invoices or Orbit bookings. Agent runtime is not automatically billable time. Paid preparation requires an agreement note; uncertain classification can remain unclassified.
+- Time-registration controls have been removed. Existing historical records remain in the private database.
 - BB enforces its own workflow transitions, version checks and MCP scope. Amp's repository and external-tool permissions are configured in Amp. Phase instructions in prompts are not a security sandbox.
 - No automatic merge, production deployment or client-message sending is implemented in BB.
 

@@ -35,10 +35,22 @@ export type AppConfig = {
   publicUrl?: string;
   ampEnabled: boolean;
   webhookSecret?: string;
+  webhookUrl?: string;
 };
 export function createApp(store: Store, connectors: Connectors, config: AppConfig) {
   const app = new Hono();
   const publicUrl = config.publicUrl ? new URL(config.publicUrl) : null;
+  const webhookUrl = config.webhookUrl ? new URL(config.webhookUrl) : null;
+  if (
+    webhookUrl &&
+    (webhookUrl.protocol !== "https:" ||
+      webhookUrl.pathname !== "/api/webhooks/orbit" ||
+      webhookUrl.search ||
+      webhookUrl.hash ||
+      webhookUrl.username ||
+      webhookUrl.password)
+  )
+    throw new Error("BB_WEBHOOK_URL must be an HTTPS URL ending in /api/webhooks/orbit");
   const sessionSecret = store.setting("session_secret") ?? randomBytes(32).toString("hex");
   store.setSetting("session_secret", sessionSecret);
   const signature = (value: string) =>
@@ -63,7 +75,11 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     // TLS may terminate at a proxy. Match the configured host and port without
     // trusting client-supplied forwarded headers or the internal HTTP scheme.
     const allowed =
-      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || url.host === publicUrl?.host;
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
+      url.host === publicUrl?.host ||
+      (c.req.method === "POST" &&
+        c.req.path === "/api/webhooks/orbit" &&
+        url.host === webhookUrl?.host);
     if (!allowed) return c.json({ error: "Host niet toegestaan. Stel BB_PUBLIC_URL in." }, 403);
     const origin = c.req.header("origin");
     if (
@@ -125,7 +141,10 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
       c.req.header("authorization"),
       c.req.header("x-bb-signature"),
     );
-    const receipt = receive(store, JSON.parse(raw));
+    const payload = JSON.parse(raw);
+    if (z.object({ probe: z.string().uuid() }).strict().safeParse(payload).success)
+      return c.json({ ok: true, probe: payload.probe });
+    const receipt = receive(store, payload);
     return c.json({ receiptId: receipt.id, status: receipt.status }, 202);
   });
   app.all("/mcp/:projectId", (c) => handleMcp(store, c.req.raw, c.req.param("projectId")));
@@ -135,6 +154,15 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
       .object({ state: z.string().min(1), code: z.string().min(1) })
       .parse(c.req.query());
     await connectors.sentryMcp.callback(state, code);
+    return c.redirect("/?view=connections");
+  });
+  app.get("/api/orbit/oauth/callback", async (c) => {
+    if (!connectors.orbitMcp) throw new AppError("Teamleader Orbit OAuth is niet ingesteld", 503);
+    const { state, code } = z
+      .object({ state: z.string().min(1), code: z.string().min(1) })
+      .parse(c.req.query());
+    await connectors.orbitMcp.callback(state, code);
+    await connectors.clients("", 1);
     return c.redirect("/?view=connections");
   });
   app.use("/api/*", async (c, next) => {
@@ -149,6 +177,13 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     if (!connectors.sentryMcp) throw new AppError("Stel SENTRY_MCP_URL en SENTRY_ORG in", 503);
     return c.json({ url: await connectors.sentryMcp.authorize() });
   });
+  app.post("/api/orbit/oauth/start", async (c) => {
+    if (!connectors.orbitMcp)
+      throw new AppError("Stel de officiële ORBIT_MCP_URL in voor OAuth", 503);
+    const url = await connectors.orbitMcp.authorize();
+    if (!url) await connectors.clients("", 1);
+    return c.json({ url });
+  });
   app.get("/api/state", (c) =>
     c.json({
       projects: store.projects(),
@@ -160,6 +195,8 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
         ...connectors.status,
         amp: config.ampEnabled,
         webhook: Boolean(config.webhookSecret),
+        webhookUrl:
+          config.webhookUrl ?? (config.publicUrl ? `${config.publicUrl}/api/webhooks/orbit` : ""),
         publicUrl: config.publicUrl ?? "",
         orbitCatalog: catalog("orbit:clients")
           ? {
@@ -360,6 +397,97 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     });
   });
   app.get("/api/amp/projects", async (c) => c.json({ projects: await listAmpProjects() }));
+  app.post("/api/connections/amp/check", async (c) =>
+    c.json({ ok: true, projects: (await listAmpProjects()).length }),
+  );
+  app.post("/api/connections/sentry/check", async (c) => {
+    await connectors.projects("sentry", "", 1);
+    return c.json({ ok: true });
+  });
+  app.post("/api/connections/webhook/check", async (c) => {
+    if (!config.webhookSecret || !webhookUrl)
+      throw new AppError(
+        "Stel BB_WEBHOOK_URL en BB_ORBIT_WEBHOOK_SECRET in en herstart de werkplek.",
+        503,
+      );
+    const probe = crypto.randomUUID();
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(10000),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.webhookSecret}`,
+      },
+      body: JSON.stringify({ probe }),
+    }).catch(() => {
+      throw new AppError(
+        "De publieke webhook is niet bereikbaar. Controleer Tailscale Funnel en de ingestelde URL.",
+        502,
+      );
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.probe !== probe)
+      throw new AppError(
+        `Webhookcontrole mislukt (${response.status}). Controleer de route en het webhookgeheim.`,
+        502,
+      );
+    return c.json({ ok: true });
+  });
+  app.post("/api/connections/mail/check", async (c) => {
+    if (!connectors.googleMail) throw new AppError("Google Workspace MCP is niet ingesteld", 503);
+    return c.json(await connectors.googleMail.check());
+  });
+  app.get("/api/mail", async (c) => {
+    if (!connectors.googleMail) throw new AppError("Google Workspace MCP is niet ingesteld", 503);
+    const result = await connectors.googleMail.search(
+      (c.req.query("q") || "in:inbox -in:drafts").slice(0, 1000),
+      c.req.query("page"),
+    );
+    const signals = store.signals();
+    return c.json({
+      ...result,
+      messages: result.messages.map((m) => ({
+        ...m,
+        url: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(connectors.googleMail?.email ?? "")}#all/${m.threadId}`,
+        taskId:
+          signals.find(
+            (s) =>
+              s.provider === "email" &&
+              s.externalId === `${connectors.googleMail?.email}:${m.threadId}`,
+          )?.taskId ?? null,
+      })),
+    });
+  });
+  app.post("/api/mail/import", async (c) => {
+    if (!connectors.googleMail) throw new AppError("Google Workspace MCP is niet ingesteld", 503);
+    const { threadId, projectId } = z
+      .object({
+        threadId: z.string().regex(/^[a-f0-9]+$/),
+        projectId: z.string().nullable().default(null),
+      })
+      .parse(await c.req.json());
+    if (projectId) store.project(projectId);
+    const signal = await connectors.googleMail.thread(threadId);
+    // Fetch first; commit the source and its destination atomically.
+    const result = store.db.transaction(() => {
+      const existing = store
+        .signals()
+        .find((s) => s.provider === "email" && s.externalId === signal.externalId);
+      if (existing) return ingest(store, signal);
+      const task = store.createTask(
+        {
+          title: signal.title,
+          description: signal.body.slice(0, 20000),
+          projectId,
+          kind: "question",
+        },
+        "email",
+      );
+      return ingest(store, signal, task.id);
+    })();
+    return c.json(result, 201);
+  });
   app.post("/api/tasks/:id/context/refresh", async (c) => {
     store.task(c.req.param("id"));
     return c.json(await connectors.refreshContext(store, c.req.param("id")));

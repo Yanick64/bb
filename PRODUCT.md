@@ -16,7 +16,7 @@ Turn client tickets and error reports into investigated, approved, implemented a
 
 ## Operating context
 
-The confirmed primary workspace is a task list with readable ticket detail. Project boards remain available. Orbit clients and Sentry projects route incoming work. Amp executes remote investigations and implementation in a project-specific orb.
+Projects open as kanban boards, with a list option. Cross-project action queues use task lists. Teamleader Orbit clients and Sentry projects route incoming work; Google Mail conversations are selected manually. Amp executes remote investigations and implementation with project-specific AI context and communication preferences.
 
 ## Capabilities and constraints
 
@@ -24,7 +24,7 @@ The confirmed primary workspace is a task list with readable ticket detail. Proj
 - Keep the workflow Inbox, Triage, Planning, In progress, Review, Delivery, Done.
 - Automatically continue after blocking answers, but require human approval for changed plans and completed work.
 - Draft delivery messages from observed results. Do not claim deployment or sent messages without evidence.
-- Record time and distinguish new business, extensions, ongoing delivery and agreed paid preparation.
+- Keep time registration out of the interface. Preserve historical records in storage.
 - Clearly distinguish a failed launch from a remote execution whose observer was lost.
 
 ## Brand commitments

@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Member, Project, ProjectInput, Signal, Task } from "../shared/domain";
-import { mappingSchema, signalInput, taskInput } from "../shared/domain";
+import { projectInput, signalInput, taskInput } from "../shared/domain";
 
 export class AppError extends Error {
   constructor(
@@ -43,7 +43,7 @@ export class Store {
       .all()
       .map((r) => {
         const project = JSON.parse(r.data) as Project;
-        return { ...project, mappings: project.mappings.map((m) => mappingSchema.parse(m)) };
+        return { ...project, ...projectInput.parse(project) };
       });
   }
   tasks(): Task[] {

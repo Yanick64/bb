@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Check,
   ClipboardList,
-  Clock,
   FileText,
   History,
   MessageCircle,
@@ -18,9 +17,9 @@ import {
   activeRun,
   currentPlan,
   deliveryText,
-  type Member,
   nextAction,
   type Project,
+  phaseLabels,
   type Run,
   type Signal,
   stageLabels,
@@ -28,27 +27,24 @@ import {
   type Task,
 } from "../../shared/domain";
 import { api, useAction, useToast } from "../lib/api";
-import { ExternalLink, Field, Priority, relativeDate, SourceBadge } from "./common";
+import { Empty, ExternalLink, Field, Priority, relativeDate, SourceBadge } from "./common";
 import { SourceContext } from "./source-context";
 import { QuestionsPanel } from "./task-questions";
 import { ReviewPanel } from "./task-review";
-import { TaskTime } from "./task-time";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 
 export type SendCommand = (command: TaskCommand, onSuccess?: () => void) => void;
-type Tab = "overview" | "questions" | "plan" | "review" | "time" | "activity";
+type Tab = "overview" | "questions" | "plan" | "review" | "activity";
 export function TaskDetail({
   task,
   projects,
-  members,
   ampEnabled,
   onClose,
   onProjectSettings,
 }: {
   task: Task;
   projects: Project[];
-  members: Member[];
   ampEnabled: boolean;
   onClose: () => void;
   onProjectSettings: () => void;
@@ -146,33 +142,39 @@ export function TaskDetail({
       </div>
       <div className="ticket-layout">
         <aside className="ticket-actions stack" aria-label="Volgende stap">
-          <section className="stack">
-            <h2>{next.label}</h2>
-            <p className="muted">{next.detail}</p>
-            {next.owner !== "none" ? (
+          <section className="next-action">
+            <div>
+              <h2>{next.label}</h2>
+              <p>{next.detail}</p>
+            </div>
+            {next.owner !== "none" &&
+            (tab !== next.tab || next.tab === "overview" || latest?.status === "failed") ? (
               <Button
                 disabled={action.isPending}
                 onClick={() => {
-                  if (latest?.status === "failed") requestRun(latest.mode);
+                  if (!task.projectId) setTab("overview");
+                  else if (latest?.status === "failed") requestRun(latest.mode);
                   else if (next.tab === "overview" && !run && task.stage !== "delivery")
                     requestRun("triage");
                   else setTab(next.tab);
                 }}
               >
                 <ArrowRight size={16} />
-                {latest?.status === "failed"
-                  ? "Opnieuw starten"
-                  : next.tab === "overview" && !run && task.stage !== "delivery"
-                    ? "Start onderzoek"
-                    : next.tab === "overview"
-                      ? "Bekijk oplevering"
-                      : next.tab === "activity"
-                        ? "Bekijk uitvoering"
-                        : next.tab === "questions"
-                          ? "Beantwoord vragen"
-                          : next.tab === "plan"
-                            ? "Bekijk plan"
-                            : "Bekijk review"}
+                {!task.projectId
+                  ? "Kies een project"
+                  : latest?.status === "failed"
+                    ? "Opnieuw starten"
+                    : next.tab === "overview" && !run && task.stage !== "delivery"
+                      ? "Start onderzoek"
+                      : next.tab === "overview"
+                        ? "Bekijk oplevering"
+                        : next.tab === "activity"
+                          ? "Bekijk uitvoering"
+                          : next.tab === "questions"
+                            ? "Beantwoord vragen"
+                            : next.tab === "plan"
+                              ? "Bekijk plan"
+                              : "Bekijk review"}
               </Button>
             ) : null}
           </section>
@@ -193,22 +195,6 @@ export function TaskDetail({
               ) : null}
             </section>
           ) : null}
-          <section className="stack">
-            <h3>Onderzoeksaanpak</h3>
-            <p className="muted">{investigation}</p>
-          </section>
-          <section className="stack">
-            <h3>Amp-project</h3>
-            <p className="muted break-word">
-              {project?.ampProject || "Nog geen project geselecteerd"}
-            </p>
-            {project ? (
-              <Button variant="ghost" size="sm" onClick={onProjectSettings}>
-                <Settings2 size={15} />
-                Projectinstellingen
-              </Button>
-            ) : null}
-          </section>
         </aside>
         <div className="ticket-document">
           <div className="task-tabs" role="tablist" aria-label="Taakonderdelen">
@@ -222,7 +208,6 @@ export function TaskDetail({
                 ],
                 ["plan", "Plan", ClipboardList],
                 ["review", "Review", Check],
-                ["time", "Tijd", Clock],
                 ["activity", "Activiteit", History],
               ] as const
             ).map(([key, label, Icon]) => (
@@ -237,14 +222,7 @@ export function TaskDetail({
                 key={key}
                 onClick={() => setTab(key)}
                 onKeyDown={(event) => {
-                  const tabs: Tab[] = [
-                    "overview",
-                    "questions",
-                    "plan",
-                    "review",
-                    "time",
-                    "activity",
-                  ];
+                  const tabs: Tab[] = ["overview", "questions", "plan", "review", "activity"];
                   const index = tabs.indexOf(key);
                   const target =
                     event.key === "ArrowRight"
@@ -278,7 +256,7 @@ export function TaskDetail({
               <div className="stack">
                 {!task.projectId ? (
                   <section className="panel">
-                    <Field label="Kies het BB-project">
+                    <Field label="Kies een project">
                       <select
                         defaultValue=""
                         onChange={(e) => {
@@ -522,9 +500,7 @@ export function TaskDetail({
                     </div>
                   </section>
                 ) : (
-                  <section className="panel empty-inline">
-                    <ClipboardList size={28} />
-                    <h3>Van aanvraag naar een concrete aanpak</h3>
+                  <Empty title="Nog geen uitvoeringsplan">
                     <p className="muted">
                       Laat Amp de code en context onderzoeken, of schrijf zelf een plan.
                     </p>
@@ -535,7 +511,7 @@ export function TaskDetail({
                       <Play size={15} />
                       Plan maken met Amp
                     </Button>
-                  </section>
+                  </Empty>
                 )}
                 {task.plans.length > 1 ? (
                   <details className="panel">
@@ -565,25 +541,14 @@ export function TaskDetail({
             ) : null}
             {tab === "review" ? (
               <div className="stack">
-                {task.stage === "review" ? (
-                  <Button
-                    variant="secondary"
-                    disabled={action.isPending || Boolean(run)}
-                    onClick={() => requestRun("review")}
-                  >
-                    Laat Amp technisch reviewen
-                  </Button>
-                ) : null}
                 <ReviewPanel
                   task={task}
                   send={send}
                   pending={action.isPending || Boolean(run)}
                   onRevise={() => requestRun("revise")}
+                  onReview={() => requestRun("review")}
                 />
               </div>
-            ) : null}
-            {tab === "time" ? (
-              <TaskTime task={task} members={members} send={send} pending={action.isPending} />
             ) : null}
             {tab === "activity" ? (
               <div className="stack">
@@ -591,7 +556,7 @@ export function TaskDetail({
                 {task.runs.toReversed().map((r) => (
                   <section className="panel stack" key={r.id}>
                     <div className="row">
-                      <strong>Amp · {r.mode}</strong>
+                      <strong>Amp · {phaseLabels[r.mode]}</strong>
                       <span
                         className={`badge ${r.status === "running" ? "badge-blue" : r.status === "failed" || r.status === "interrupted" ? "badge-orange" : ""}`}
                       >
@@ -618,8 +583,8 @@ export function TaskDetail({
                         }}
                       >
                         <p>
-                          Controleer eerst in Amp dat de remote uitvoering is gestopt. BB start deze
-                          taak pas daarna opnieuw.
+                          Controleer eerst in Amp dat de remote uitvoering is gestopt. De werkplek
+                          start deze taak pas daarna opnieuw.
                         </p>
                         <Field label="Wat heb je gecontroleerd?">
                           <input
@@ -714,7 +679,7 @@ export function TaskDetail({
           open
           onClose={() => setRunMode(null)}
           title="Amp in een orb starten"
-          description={`Actie: ${runMode}. Amp gebruikt de tools en MCP's van het gekoppelde Amp-project.`}
+          description={`Actie: ${phaseLabels[runMode]}. Amp gebruikt de tools en MCP's van het gekoppelde Amp-project.`}
         >
           <form
             className="dialog-body stack"
@@ -751,7 +716,7 @@ export function TaskDetail({
             </Field>
             <Button disabled={action.isPending}>
               <Play size={15} />
-              Start {runMode}
+              Start {phaseLabels[runMode].toLowerCase()}
             </Button>
           </form>
         </Dialog>

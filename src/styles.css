@@ -1050,7 +1050,66 @@ time {
   font-size: 12px;
 }
 .connection-card pre {
+  margin-top: 12px;
+}
+.connection-card details {
   margin-top: auto;
+}
+.connection-card summary,
+.phase-guidance summary {
+  cursor: pointer;
+  font-weight: 550;
+}
+.connection-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.phase-guidance > p {
+  margin: 14px 0 20px;
+}
+.section-divider > .stack {
+  margin-top: 20px;
+}
+.mail-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+  gap: 24px;
+}
+.mail-search {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.mail-search > .button {
+  margin-top: 27px;
+}
+.mail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--border);
+}
+.mail-row > svg {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.mail-row > .button {
+  flex-shrink: 0;
+}
+.mail-content {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mail-content h2 {
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+.mail-content > p {
+  margin-bottom: 10px;
 }
 .connection-icon {
   height: 38px;
@@ -1110,17 +1169,6 @@ time {
   color: var(--faint);
   font-size: 10px;
   margin-top: 8px;
-}
-.empty-inline {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 45px 25px;
-  gap: 16px;
-}
-.empty-inline > svg {
-  color: var(--faint);
 }
 .loading-screen,
 .login-screen {
@@ -1213,6 +1261,7 @@ time {
   flex-direction: column;
   gap: 6px;
   width: 100%;
+  margin-bottom: 8px;
 }
 .field > span {
   font-size: 11px;
@@ -1278,7 +1327,7 @@ time {
   flex: 1;
 }
 .source-search select {
-  max-width: 155px;
+  max-width: 240px;
   font-size: 14px;
 }
 .source-results {
@@ -1318,26 +1367,6 @@ time {
   padding: 14px 16px;
   background: var(--orange-soft);
   color: var(--foreground);
-}
-.next-action > span:nth-child(2) {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex: 1;
-}
-.next-action small {
-  font-size: 9px;
-  color: var(--primary);
-  text-transform: uppercase;
-  letter-spacing: 0.7px;
-}
-.next-action strong {
-  font-size: 12px;
-  font-weight: 600;
-}
-.next-action span > span {
-  color: var(--muted);
-  font-size: 11px;
 }
 .next-symbol {
   color: var(--primary);
@@ -1818,6 +1847,30 @@ time {
   }
 }
 @media (max-width: 680px) {
+  .mail-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .mail-search {
+    flex-wrap: wrap;
+  }
+  .mail-search > .button {
+    margin-top: 0;
+  }
+  .mail-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .mail-row > svg {
+    display: none;
+  }
+  .mail-content {
+    flex-basis: 100%;
+  }
+  .connection-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
   .sidebar {
     transform: translateX(-100%);
     visibility: hidden;
@@ -2300,7 +2353,7 @@ time,
   font-size: 13px;
 }
 .ticket-project-shortcut {
-  display: none;
+  margin-left: auto;
 }
 .ticket-workspace .task-top {
   padding: 0 0 28px;
@@ -2315,24 +2368,37 @@ time,
   outline: none;
 }
 .ticket-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 40px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 .ticket-document {
-  grid-column: 1;
-  grid-row: 1;
+  width: 100%;
   min-width: 0;
 }
 .ticket-actions {
-  grid-column: 2;
-  grid-row: 1;
-  position: sticky;
-  top: 24px;
-  padding: 24px 0 0 24px;
-  border-left: 1px solid var(--border);
-  gap: 28px;
+  width: 100%;
+  gap: 16px;
+}
+.next-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 24px;
+  border-radius: 8px;
+  background: var(--orange-soft);
+  color: var(--primary);
+}
+.next-action > div {
+  max-width: 72ch;
+}
+.next-action p {
+  margin-top: 6px;
+  color: var(--foreground);
+}
+.next-action > .button {
+  flex-shrink: 0;
 }
 .ticket-actions h2 {
   font-size: 18px;
@@ -2342,9 +2408,6 @@ time,
   font-size: 14px;
   line-height: 1.6;
   overflow-wrap: anywhere;
-}
-.ticket-actions section {
-  gap: 10px;
 }
 .ticket-actions .button {
   justify-content: flex-start;
@@ -2360,7 +2423,7 @@ time,
   overflow: visible;
 }
 .ticket-workspace .task-content > .stack {
-  gap: 40px;
+  gap: 28px;
 }
 .ticket-workspace .task-content .panel {
   border: 0;
@@ -2460,13 +2523,6 @@ time,
   overflow-wrap: anywhere;
 }
 @media (max-width: 1200px) {
-  .ticket-layout {
-    grid-template-columns: minmax(0, 1fr) 240px;
-    gap: 24px;
-  }
-  .ticket-actions {
-    padding-left: 20px;
-  }
   .list-heading,
   .task-row {
     grid-template-columns: minmax(200px, 2fr) minmax(130px, 1fr) 110px;
@@ -2474,42 +2530,6 @@ time,
   .task-row-project,
   .list-heading > span:nth-child(2) {
     display: none;
-  }
-}
-@media (max-width: 1000px) {
-  .ticket-project-shortcut {
-    display: inline-flex;
-  }
-  .ticket-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-  .ticket-actions {
-    width: 100%;
-    position: static;
-    border: 0;
-    border-top: 1px solid var(--border);
-    padding: 20px 0 0;
-  }
-  .ticket-actions > section:not(:first-child):not(.context-notice) {
-    display: none;
-  }
-  .ticket-actions > section:first-child {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    column-gap: 24px;
-  }
-  .ticket-actions > section:first-child p {
-    grid-column: 1;
-  }
-  .ticket-actions > section:first-child .button {
-    grid-column: 2;
-    grid-row: 1 / 3;
-  }
-  .ticket-document {
-    width: 100%;
   }
 }
 @media (min-width: 681px) and (max-width: 900px) {
@@ -2611,13 +2631,22 @@ time,
   .ticket-back > span {
     width: 100%;
   }
+  .ticket-project-shortcut {
+    margin-left: 0;
+  }
+  .ticket-workspace .task-top {
+    padding-bottom: 20px;
+  }
   .ticket-workspace .task-top h1 {
     font-size: 26px;
+    margin-bottom: 0;
   }
   .ticket-actions > section:first-child {
-    display: flex;
+    flex-direction: column;
     align-items: stretch;
     text-align: left;
+    padding: 18px;
+    gap: 16px;
   }
   .ticket-workspace .task-tabs button {
     min-width: max-content;

@@ -6,7 +6,8 @@ import {
   parseOrbitClients,
   parseSentryMcpIssues,
 } from "../server/connectors";
-import { SentryMcp } from "../server/sentry-mcp";
+import { McpOAuth } from "../server/mcp-oauth";
+import type { SentryMcp } from "../server/sentry-mcp";
 import { Store } from "../server/store";
 import {
   acceptReview,
@@ -275,93 +276,144 @@ test("failed source is reported without blocking another mapped source", async (
   expect(result.created).toBe(0);
 });
 
-test("OAuth state rejects tampering and replay, tokens survive a fresh connection", async () => {
-  const { store } = setup();
-  let state = "";
-  let exchanges = 0;
-  const authenticate: ConstructorParameters<typeof SentryMcp>[3] = async (provider, options) => {
-    if (options.authorizationCode) {
-      exchanges++;
-      expect(await provider.codeVerifier()).toBe("test-verifier");
-      await provider.saveTokens({ access_token: "test-access", token_type: "Bearer" });
-      return "AUTHORIZED";
-    }
-    state = (await provider.state?.()) ?? "";
-    await provider.saveCodeVerifier("test-verifier");
-    await provider.redirectToAuthorization(new URL(`https://example.com/authorize?state=${state}`));
-    return "REDIRECT";
-  };
-  const mcp = new SentryMcp(
-    store,
-    "https://example.com/mcp",
-    "http://localhost/callback",
-    authenticate,
-  );
-  await mcp.authorize();
-  await expect(mcp.callback("wrong", "code")).rejects.toThrow("Ongeldige");
-  expect(exchanges).toBe(0);
-  await mcp.callback(state, "code");
-  expect(mcp.connected).toBe(true);
-  await expect(mcp.callback(state, "code")).rejects.toThrow("Ongeldige");
-  expect(exchanges).toBe(1);
-  expect(
-    new SentryMcp(store, "https://example.com/mcp", "http://localhost/callback").connected,
-  ).toBe(true);
-  expect(
-    new SentryMcp(store, "https://other.example/mcp", "http://localhost/callback").connected,
-  ).toBe(false);
-});
+test.each(["sentry", "orbit"] as const)(
+  "%s OAuth rejects tampering and replay, tokens persist only for this provider and origin",
+  async (service) => {
+    const { store } = setup();
+    let state = "";
+    let exchanges = 0;
+    const authenticate: ConstructorParameters<typeof SentryMcp>[3] = async (provider, options) => {
+      if (options.authorizationCode) {
+        exchanges++;
+        expect(await provider.codeVerifier()).toBe("test-verifier");
+        await provider.saveTokens({ access_token: "test-access", token_type: "Bearer" });
+        return "AUTHORIZED";
+      }
+      state = (await provider.state?.()) ?? "";
+      await provider.saveCodeVerifier("test-verifier");
+      await provider.redirectToAuthorization(
+        new URL(`https://example.com/authorize?state=${state}`),
+      );
+      return "REDIRECT";
+    };
+    const mcp = new McpOAuth(
+      store,
+      "https://example.com/mcp",
+      "http://localhost/callback",
+      service,
+      authenticate,
+    );
+    await mcp.authorize();
+    await expect(mcp.callback("wrong", "code")).rejects.toThrow("Ongeldige");
+    expect(exchanges).toBe(0);
+    await mcp.callback(state, "code");
+    expect(mcp.connected).toBe(true);
+    await expect(mcp.callback(state, "code")).rejects.toThrow("Ongeldige");
+    expect(exchanges).toBe(1);
+    expect(
+      new McpOAuth(store, "https://example.com/mcp", "http://localhost/callback", service)
+        .connected,
+    ).toBe(true);
+    expect(
+      new McpOAuth(store, "https://other.example/mcp", "http://localhost/callback", service)
+        .connected,
+    ).toBe(false);
+    expect(
+      new McpOAuth(
+        store,
+        "https://example.com/mcp",
+        "http://localhost/callback",
+        service === "sentry" ? "orbit" : "sentry",
+      ).connected,
+    ).toBe(false);
+  },
+);
 
-test("failed OAuth code exchange consumes state and removes PKCE verifier", async () => {
-  const { store } = setup();
-  let state = "";
-  let verifier: (() => string | Promise<string>) | undefined;
-  const authenticate: ConstructorParameters<typeof SentryMcp>[3] = async (provider, options) => {
-    if (options.authorizationCode) {
-      verifier = () => provider.codeVerifier();
-      throw new Error("Exchange failed");
-    }
-    state = (await provider.state?.()) ?? "";
-    await provider.saveCodeVerifier("verifier");
-    await provider.redirectToAuthorization(new URL("https://example.com/authorize"));
-    return "REDIRECT";
-  };
-  const mcp = new SentryMcp(
-    store,
-    "https://example.com/mcp",
-    "http://localhost/callback",
-    authenticate,
-  );
-  await mcp.authorize();
-  await expect(mcp.callback(state, "bad-code")).rejects.toThrow("Exchange failed");
-  await expect(mcp.callback(state, "bad-code")).rejects.toThrow("Ongeldige");
-  expect(() => verifier?.()).toThrow("opnieuw");
-});
+test.each(["sentry", "orbit"] as const)(
+  "%s failed OAuth exchange consumes state and removes PKCE verifier",
+  async (service) => {
+    const { store } = setup();
+    let state = "";
+    let verifier: (() => string | Promise<string>) | undefined;
+    const authenticate: ConstructorParameters<typeof SentryMcp>[3] = async (provider, options) => {
+      if (options.authorizationCode) {
+        verifier = () => provider.codeVerifier();
+        throw new Error("Exchange failed");
+      }
+      state = (await provider.state?.()) ?? "";
+      await provider.saveCodeVerifier("verifier");
+      await provider.redirectToAuthorization(new URL("https://example.com/authorize"));
+      return "REDIRECT";
+    };
+    const mcp = new McpOAuth(
+      store,
+      "https://example.com/mcp",
+      "http://localhost/callback",
+      service,
+      authenticate,
+    );
+    await mcp.authorize();
+    await expect(mcp.callback(state, "bad-code")).rejects.toThrow("Exchange failed");
+    await expect(mcp.callback(state, "bad-code")).rejects.toThrow("Ongeldige");
+    expect(() => verifier?.()).toThrow("opnieuw");
+  },
+);
 
-test("OAuth expires after ten minutes and a new login replaces older state", async () => {
+test.each(["sentry", "orbit"] as const)(
+  "%s OAuth expires after ten minutes and a new login replaces older state",
+  async (service) => {
+    const { store } = setup();
+    let state = "";
+    const authenticate: ConstructorParameters<typeof SentryMcp>[3] = async (provider) => {
+      state = (await provider.state?.()) ?? "";
+      await provider.redirectToAuthorization(new URL("https://example.com/authorize"));
+      return "REDIRECT";
+    };
+    const mcp = new McpOAuth(
+      store,
+      "https://example.com/mcp",
+      "http://localhost/callback",
+      service,
+      authenticate,
+    );
+    await mcp.authorize();
+    const first = state;
+    await mcp.authorize();
+    expect(state).not.toBe(first);
+    await expect(mcp.callback(first, "code")).rejects.toThrow("Ongeldige");
+    const future = Date.now() + 11 * 60 * 1000;
+    const clock = spyOn(Date, "now").mockReturnValue(future);
+    try {
+      await expect(mcp.callback(state, "code")).rejects.toThrow("verlopen");
+    } finally {
+      clock.mockRestore();
+    }
+  },
+);
+
+test("Orbit uses its OAuth connection instead of a rejected static token", async () => {
   const { store } = setup();
-  let state = "";
-  const authenticate: ConstructorParameters<typeof SentryMcp>[3] = async (provider) => {
-    state = (await provider.state?.()) ?? "";
-    await provider.redirectToAuthorization(new URL("https://example.com/authorize"));
-    return "REDIRECT";
-  };
-  const mcp = new SentryMcp(
-    store,
-    "https://example.com/mcp",
-    "http://localhost/callback",
-    authenticate,
-  );
-  await mcp.authorize();
-  const first = state;
-  await mcp.authorize();
-  expect(state).not.toBe(first);
-  await expect(mcp.callback(first, "code")).rejects.toThrow("Ongeldige");
-  const future = Date.now() + 11 * 60 * 1000;
-  const clock = spyOn(Date, "now").mockReturnValue(future);
-  try {
-    await expect(mcp.callback(state, "code")).rejects.toThrow("verlopen");
-  } finally {
-    clock.mockRestore();
+  const calls: string[] = [];
+  class OrbitStub extends McpOAuth {
+    override get connected() {
+      return true;
+    }
+    override async call(name: string): ReturnType<McpOAuth["call"]> {
+      calls.push(name);
+      return { content: [{ type: "text", text: "Authenticated Orbit result" }] };
+    }
   }
+  const connectors = new Connectors(
+    {
+      orbitUrl: "http://127.0.0.1:1/mcp",
+      orbitToken: "rejected-static-token",
+      sentryUrl: "https://sentry.io",
+    },
+    undefined,
+    new OrbitStub(store, "https://example.com/mcp", "http://localhost/callback", "orbit"),
+  );
+  expect(await connectors.orbitCall("ListClients", {})).toBe("Authenticated Orbit result");
+  expect(calls).toEqual(["ListClients"]);
+  expect(connectors.status.orbit).toBe(true);
+  expect(connectors.status.orbitOAuth).toBe(true);
 });

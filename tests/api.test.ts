@@ -54,6 +54,50 @@ test("rejects DNS rebinding hostnames", async () => {
   const { app } = setup();
   expect((await app.request("http://evil.example/api/state")).status).toBe(403);
 });
+test("authenticated webhook probes verify the route without creating receipts or tasks", async () => {
+  const { store, request } = setup();
+  const probe = crypto.randomUUID();
+  expect((await request("/api/webhooks/orbit", { probe })).status).toBe(401);
+  const response = await request(
+    "/api/webhooks/orbit",
+    { probe },
+    { authorization: "Bearer test-webhook-secret" },
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ok: true, probe });
+  expect(await (await request("/api/webhook-receipts")).json()).toEqual([]);
+  expect(store.tasks()).toEqual([]);
+});
+test("webhook-only public host admits authenticated receipts but not the application", async () => {
+  const store = new Store();
+  stores.push(store);
+  const app = createApp(store, new Connectors({ sentryUrl: "https://sentry.io" }), {
+    dataDir: "./data/test",
+    ampEnabled: false,
+    webhookUrl: "https://hooks.example:10000/api/webhooks/orbit",
+    webhookSecret: "test-webhook-secret",
+  });
+  const url = "http://hooks.example:10000/api/webhooks/orbit";
+  const body = JSON.stringify({ ticketId: "TC0000000000001" });
+  expect((await app.request(url, { method: "POST", body })).status).toBe(401);
+  expect(
+    (
+      await app.request(url, {
+        method: "POST",
+        body,
+        headers: { authorization: "Bearer test-webhook-secret" },
+      })
+    ).status,
+  ).toBe(202);
+  expect((await app.request("http://hooks.example:10000/api/state")).status).toBe(403);
+  expect((await app.request("http://hooks.example:10000/api/webhooks/orbit/../state")).status).toBe(
+    403,
+  );
+  expect((await app.request("http://hooks.example:10000/")).status).toBe(403);
+  expect(
+    (await app.request("http://hooks.example/api/webhooks/orbit", { method: "POST", body })).status,
+  ).toBe(403);
+});
 test("HTTPS public origin works behind an HTTP reverse proxy with secure login cookies", async () => {
   const { app } = setup("test-password", "https://preview.example");
   const auth = await app.request("http://preview.example/api/auth");

@@ -1,32 +1,29 @@
 # Implementation status
 
-Updated 29 October 2026 after the personal-workbench redesign.
+Updated 29 October 2026 after integration and workbench refinement.
 
-## Verified in this revision
+## Verified
 
-- Strict TypeScript, Biome, 50 tests and production build pass.
-- Regression tests cover empty Orbit descriptions, conversation ordering within the same minute, existing-signal enrichment, preservation of operator descriptions, Sentry issue/event refresh and retained snapshots after failed access.
-- Real CLI subprocess fixtures distinguish inaccessible-project startup failure from unknown observer loss and failure after a thread exists.
-- The affected local Orbit task now contains its customer request, four comments, attachment metadata and an original-source link. Two local Sentry issues received deeper issue/event snapshots through the coding assistant's MCP connection.
-- The affected Amp mapping was verified against the accessible project catalog and corrected. The confirmed pre-launch error was reconciled through the existing task API. No customer implementation was launched.
-- Browser checks use synthetic Studio Noord data. The task list and full-page ticket were inspected at 1440px and 390px, with an additional list check at 800px. Mobile document width equals viewport width; reading text computes to 15px. The task detail has no dialog wrapper.
-- Personal time registration saved 15 minutes under `self` through the browser with an empty member roster. The live affected ticket renders its 406-character request, four comments, two attachments, metadata, source link and corrected Amp mapping without horizontal overflow.
-- The project picker lists actual accessible Amp projects and fills the matching repository on selection.
-- Axe reported zero WCAG 2 A/AA violations on desktop/mobile ticket views and the dark task list. The reviewer checked the offscreen tab contrast manually and measured 5.60:1 in light mode and 8.36:1 in dark mode.
-- Impeccable's final verdict is `ship`. The recheck confirmed mobile project-settings access, the secondary typography fixes and visible status at intermediate widths. The mechanical detector returned no findings. Local review evidence stays under `.impeccable/review/`; committed screenshots contain synthetic data.
+- Strict TypeScript, Biome, 67 tests with 310 assertions and the production build pass.
+- Teamleader Orbit OAuth and Sentry are connected. Live project synchronization returned zero new tasks, three existing tasks and no errors.
+- The public Funnel webhook returned 401 without authentication and 202 with the receiving secret. Processing linked the known ticket to its existing task. An authenticated connection probe returned success without adding a receipt.
+- Amp, Sentry, Google Mail and public-webhook checks returned HTTP 200. Google Mail reused cached Workspace MCP authorization, returned 19 distinct conversations from 20 messages, retrieved a validated conversation and handled an empty search.
+- Regression coverage includes OAuth state, expiry, replay and provider separation; webhook-only hosts and receipt-free probes; mail parser failures, truncation, concurrent deduplication and destination preservation; legacy project defaults and active-phase prompt guidance.
+- Projects default to kanban. The task page uses one purple next-action bar, consistent question/plan/review sections and dashed empty states. Time-registration controls are removed; historical data remains stored.
+- Synthetic browser checks exercised mail pagination, destination selection, task creation, project-context saving and keyboard tab navigation. Project and communication guidance plus delivery instructions survived saving and reopening.
+- Browser inspection covered 1440px desktop, 800px tablet and 390px mobile, including light and dark themes. Tested document widths matched viewports. Axe reported zero WCAG 2 A/AA violations on the ticket, mail, project dialog, connections and review views. Offscreen text and Radix focus guards required manual review.
+- The Impeccable mechanical scan reported advisory design-token mismatches in the existing CSS cascade. Rendered checks take precedence over overridden declarations. Review evidence stays under `.impeccable/review/`; published screenshots use synthetic data only.
 
-## Previous integration evidence
+## Existing integration evidence
 
-The live automatic-continuation smoke test completed two remote turns in one thread and returned an unapproved plan. Existing repository smoke tests also exercised HTTPS preview login and authenticated screenshot import. These checks were completed before this redesign; this revision uses subprocess fixtures for failure classification rather than launching another customer orb.
+Earlier checks completed two remote Amp turns in one thread and returned an unapproved plan. Subprocess fixtures cover failed startup, unknown observer loss and interruptions after a thread exists. The current refinement did not launch customer work.
 
-## Needs configuration or verification
+## Still requires configuration or verification
 
-- Orbit persistent access still returns HTTP 401 for the local token. Confirm its matching MCP endpoint or provide accepted authorization. Credentials stay in ignored local storage.
-- Finish BB's own Sentry OAuth login from **Verbindingen**. The coding assistant's connection does not authorize the application.
-- Orbit's `/ticket/<number>` route was confirmed to reach tenant login. The authenticated destination could not be verified in this session. The source link and ticket number are available for checking after login.
-- Configure actual webhook forwarding and capture one event to verify the envelope.
-- Configure each Amp project's orb environment and MCP permissions. Optional BB MCP callbacks need an orb-reachable URL.
+- Configure actual sender-side webhook forwarding and capture a real event to verify its envelope. Transport tests do not prove the sender is forwarding.
+- The Teamleader Orbit `/ticket/<number>` link reaches tenant login; its authenticated destination remains unverified.
+- Configure each Amp project's tools and orb environment. Optional workbench MCP callbacks need an orb-reachable URL.
 
-## Remaining product work
+## Follow-up work
 
-Full source pagination, scheduled reconciliation, webhook/event retention, time corrections/export, GitHub CI import and a disposable code-changing PR exercise remain follow-ups. The current workbench is for personal use and one server process per database.
+Full Teamleader Orbit/Sentry source history, scheduled reconciliation, receipt retention, GitHub CI import and a disposable code-changing PR exercise remain follow-ups. Google Mail already supports search pagination. The workbench is single-operator and runs one server process per database.

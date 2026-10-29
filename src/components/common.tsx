@@ -48,11 +48,11 @@ export function SourceBadge({ source }: { source: Source }) {
     <span className={`source-badge source-${source}`}>
       <Icon size={12} />
       {source === "orbit"
-        ? "Orbit"
+        ? "Teamleader Orbit"
         : source === "sentry"
           ? "Sentry"
           : source === "email"
-            ? "E-mail"
+            ? "Google Mail"
             : "Handmatig"}
     </span>
   );

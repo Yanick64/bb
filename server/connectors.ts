@@ -3,6 +3,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { decodeHTML } from "entities";
 import { z } from "zod";
 import { type ProjectInput, signalInput } from "../shared/domain";
+import type { GoogleMail } from "./google-mail";
+import type { McpOAuth } from "./mcp-oauth";
 import type { SentryMcp } from "./sentry-mcp";
 import { AppError, type Store } from "./store";
 import { ingest } from "./workflow";
@@ -35,19 +37,23 @@ export function parseOrbitProjects(value: unknown): {
   hasMore: boolean;
 } {
   if (typeof value !== "string")
-    throw new AppError("Onbekend Orbit-projectformaat. Controleer de connector.", 502);
+    throw new AppError("Onbekend Teamleader Orbit-projectformaat. Controleer de connector.", 502);
   const ids = value.match(/api_ids:\s*([^\n]+)/)?.[1].match(/PR[A-Z0-9]{13}/g) ?? [];
   const rows = value.split("\n").filter((line) => /^\|\s*\d/.test(line));
   if (rows.length !== ids.length)
-    throw new AppError("Orbit-projectnamen en IDs sluiten niet aan; import gestopt.", 502);
+    throw new AppError(
+      "Teamleader Orbit-projectnamen en IDs sluiten niet aan; import gestopt.",
+      502,
+    );
   if (!rows.length && !/Found 0 project/.test(value))
-    throw new AppError("Orbit-projectoverzicht niet herkend", 502);
+    throw new AppError("Teamleader Orbit-projectoverzicht niet herkend", 502);
   const projects = rows.map((line, index) => {
     const cells = line
       .split(/(?<!\\)\|/)
       .slice(1, -1)
       .map((cell) => cell.trim().replaceAll("\\|", "|"));
-    if (cells.length !== 10) throw new AppError("Orbit-tabel is gewijzigd; import gestopt.", 502);
+    if (cells.length !== 10)
+      throw new AppError("Teamleader Orbit-tabel is gewijzigd; import gestopt.", 502);
     return {
       externalId: ids[index],
       name: cells[1],
@@ -68,7 +74,8 @@ export function parseOrbitClients(
   value: unknown,
   pageSize = 30,
 ): { clients: SourceProject[]; hasMore: boolean } {
-  if (typeof value !== "string") throw new AppError("Orbit-klantenoverzicht niet herkend", 502);
+  if (typeof value !== "string")
+    throw new AppError("Teamleader Orbit-klantenoverzicht niet herkend", 502);
   const paging = value.match(/Found (\d+) company\/companies.*?page (\d+) \((\d+) rows\)/);
   const ids = value.match(/api_ids:\s*([^\n]+)/)?.[1].match(/CL[A-Z0-9]{13}/g) ?? [];
   const rows = value
@@ -76,14 +83,14 @@ export function parseOrbitClients(
     .filter((line) => line.startsWith("|"))
     .slice(2);
   if (!paging || rows.length !== ids.length || rows.length !== Number(paging[3]))
-    throw new AppError("Orbit-klantnamen en IDs sluiten niet aan; import gestopt.", 502);
+    throw new AppError("Teamleader Orbit-klantnamen en IDs sluiten niet aan; import gestopt.", 502);
   const clients = rows.map((line, index) => {
     const cells = line
       .split(/(?<!\\)\|/)
       .slice(1, -1)
       .map((cell) => cell.trim().replaceAll("\\|", "|"));
     if (cells.length !== 7)
-      throw new AppError("Orbit-klantentabel is gewijzigd; import gestopt.", 502);
+      throw new AppError("Teamleader Orbit-klantentabel is gewijzigd; import gestopt.", 502);
     return {
       provider: "orbit" as const,
       scope: "client" as const,
@@ -175,7 +182,7 @@ export function normalizeOrbitTicket(input: unknown, conversation?: unknown, bas
     fetchedAt: conversation ? new Date().toISOString() : "",
     contextWarning:
       thread.comments.length >= 100 || (thread.count ?? 0) > comments.length
-        ? "Orbit geeft maximaal 100 berichten terug. Bekijk de bron voor eerdere berichten."
+        ? "Teamleader Orbit geeft maximaal 100 berichten terug. Bekijk de bron voor eerdere berichten."
         : !conversation
           ? "De ticketconversatie is nog niet opgehaald."
           : "",
@@ -249,10 +256,14 @@ export class Connectors {
   constructor(
     private config: ConnectorConfig,
     readonly sentryMcp?: SentryMcp,
+    readonly orbitMcp?: McpOAuth,
+    readonly googleMail?: GoogleMail,
   ) {}
   get status() {
     return {
-      orbit: this.orbitVerified && !this.orbitError,
+      orbit: (this.orbitMcp?.connected || this.orbitVerified) && !this.orbitError,
+      orbitOAuth: Boolean(this.orbitMcp),
+      googleMail: this.googleMail?.status ?? { configured: false, connected: false, email: "" },
       orbitConfigured: Boolean(this.config.orbitUrl),
       orbitError: this.orbitError,
       sentry: Boolean(
@@ -266,12 +277,27 @@ export class Connectors {
     args: Record<string, unknown>,
   ) {
     if (!this.config.orbitUrl)
-      throw new AppError("Stel ORBIT_MCP_URL in om Orbit te verbinden", 503);
+      throw new AppError("Stel ORBIT_MCP_URL in om Teamleader Orbit te verbinden", 503);
     if (Date.now() < this.orbitBlockedUntil)
       throw new AppError(
-        `Orbit is begrensd tot ${new Date(this.orbitBlockedUntil).toISOString()}`,
+        `Teamleader Orbit is begrensd tot ${new Date(this.orbitBlockedUntil).toISOString()}`,
         429,
       );
+    if (this.orbitMcp) {
+      try {
+        const result = unwrapMcp(await this.orbitMcp.call(name, args));
+        this.orbitError = "";
+        this.orbitVerified = true;
+        return result;
+      } catch (error) {
+        if (error instanceof AppError && error.status === 429) this.blockOrbit(error.message);
+        this.orbitError =
+          error instanceof AppError
+            ? error.message
+            : "Teamleader Orbit-verbinding mislukt. Meld je opnieuw aan in Verbindingen.";
+        throw new AppError(this.orbitError, error instanceof AppError ? error.status : 502);
+      }
+    }
     const client = new Client({ name: "bb", version: "0.1.0" });
     const transport = new StreamableHTTPClientTransport(new URL(this.config.orbitUrl), {
       requestInit: {
@@ -298,17 +324,20 @@ export class Connectors {
     } catch (error) {
       if (error instanceof AppError && error.status === 429) {
         // Preserve the provider's retry message. Require a conservative pause if no machine-readable time exists.
-        const seconds = error.message.match(/(?:retry after|retry in|wait)\s*(\d+)\s*s/i)?.[1];
-        this.orbitBlockedUntil = Date.now() + (seconds ? Number(seconds) * 1000 : 60 * 60 * 1000);
+        this.blockOrbit(error.message);
       }
       if (error instanceof AppError) throw error;
       this.orbitError = /401|Unauthorized/i.test(String(error))
-        ? "Orbit weigert de autorisatie (401). Controleer of de token bij deze MCP-URL hoort; het officiële endpoint gebruikt OAuth."
-        : "Orbit-verbinding mislukt. Controleer de MCP-URL, autorisatie en bereikbaarheid.";
+        ? "Teamleader Orbit weigert de autorisatie (401). Controleer of de token bij deze MCP-URL hoort; het officiële endpoint gebruikt OAuth."
+        : "Teamleader Orbit-verbinding mislukt. Controleer de MCP-URL, autorisatie en bereikbaarheid.";
       throw new AppError(this.orbitError, 502);
     } finally {
       await client.close().catch(() => {});
     }
+  }
+  private blockOrbit(message: string) {
+    const seconds = message.match(/(?:retry after|retry in|wait)\s*(\d+)\s*s/i)?.[1];
+    this.orbitBlockedUntil = Date.now() + (seconds ? Number(seconds) * 1000 : 60 * 60 * 1000);
   }
   async projects(provider: "orbit" | "sentry", query: string, page: number) {
     if (provider === "orbit")
@@ -394,6 +423,17 @@ export class Connectors {
       try {
         if (signal.provider === "orbit")
           ingest(store, await this.ticket(signal.externalId), undefined, updateDescription);
+        else if (
+          signal.provider === "email" &&
+          this.googleMail &&
+          signal.externalId.startsWith(`${this.googleMail.email}:`)
+        )
+          ingest(
+            store,
+            await this.googleMail.thread(signal.externalId.slice(this.googleMail.email.length + 1)),
+            undefined,
+            updateDescription,
+          );
         else if (signal.provider === "sentry") {
           if (!this.sentryMcp?.connected)
             throw new AppError(

@@ -40,8 +40,32 @@ export const mappingSchema = z
     (mapping) =>
       mapping.scope !== "client" ||
       (mapping.provider === "orbit" && /^CL[A-Z0-9]{13}$/.test(mapping.externalId)),
-    "Kies een Orbit-klant met een geldig CL-api_id",
+    "Kies een Teamleader Orbit-klant met een geldig CL-api_id",
   );
+export const phaseLabels = {
+  triage: "Onderzoek",
+  plan: "Planning",
+  implement: "Uitvoering",
+  revise: "Aanpassingen",
+  review: "Technische review",
+  delivery: "Oplevering",
+} as const;
+export const projectGuidance = z
+  .object({
+    context: z.string().trim().max(12000).default(""),
+    communication: z.string().trim().max(6000).default(""),
+    phases: z
+      .object({
+        triage: z.string().trim().max(4000).default(""),
+        plan: z.string().trim().max(4000).default(""),
+        implement: z.string().trim().max(4000).default(""),
+        revise: z.string().trim().max(4000).default(""),
+        review: z.string().trim().max(4000).default(""),
+        delivery: z.string().trim().max(4000).default(""),
+      })
+      .prefault({}),
+  })
+  .prefault({});
 export const projectInput = z.object({
   name: text.max(120),
   description: z.string().max(4000).default(""),
@@ -53,6 +77,7 @@ export const projectInput = z.object({
     .default(""),
   repository: optionalUrl,
   qualityCommands: z.string().max(4000).default(""),
+  guidance: projectGuidance,
   mappings: z.array(mappingSchema).max(200).default([]),
 });
 export type ProjectInput = z.infer<typeof projectInput>;

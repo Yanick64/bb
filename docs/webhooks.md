@@ -1,4 +1,4 @@
-# Orbit ticket webhooks
+# Teamleader Orbit ticket webhooks
 
 ## Receiver
 
@@ -9,6 +9,27 @@ Authorization: Bearer YOUR_BB_ORBIT_WEBHOOK_SECRET
 ```
 
 Set `BB_ORBIT_WEBHOOK_SECRET` on the BB server. For HMAC authentication instead, set `X-BB-Signature` to `sha256=` followed by the hex HMAC-SHA256 of the exact request body using that secret.
+
+This receiving secret is separate from Teamleader Orbit OAuth credentials.
+
+## Public webhook with a local UI
+
+Use Tailscale Funnel when the sender is outside the tailnet. Tailscale Serve alone is not public. Preserve existing routes and add the webhook on an available Funnel HTTPS port:
+
+```sh
+tailscale funnel --bg --https=10000 --set-path=/api/webhooks/orbit http://127.0.0.1:4310/api/webhooks/orbit
+```
+
+Use the hostname printed by Tailscale:
+
+```dotenv
+BB_WEBHOOK_URL=https://YOUR_NODE.YOUR_TAILNET.ts.net:10000/api/webhooks/orbit
+BB_ORBIT_WEBHOOK_SECRET=YOUR_SEPARATE_RANDOM_SECRET
+```
+
+Restart the full BB process after changing `.env`; watch reloads can retain inherited environment values. This URL permits only webhook POST requests on the public host. It does not change the UI URL or OAuth callbacks. Keep BB and Tailscale running to receive deliveries.
+
+Every connection has a **Verbinding controleren** action. The webhook check sends an authenticated `{ "probe": "<uuid>" }` challenge and verifies its response. Probes create neither receipts nor tasks. This verifies transport and authentication, not sender-side forwarding.
 
 BB persists the receipt and returns HTTP 202 with `receiptId` and `status`. Duplicate bodies return the existing receipt. Task creation is independently deduplicated by the Orbit ticket ID, so different deliveries about the same ticket cannot create duplicate tasks.
 
@@ -50,8 +71,8 @@ BB does not call the old receiver URL and does not modify its configuration. Rea
 
 Before forwarding real traffic:
 
-1. Run BB on a persistent host with HTTPS and `BB_PASSWORD`.
-2. Set `BB_PUBLIC_URL` and `BB_ORBIT_WEBHOOK_SECRET`.
+1. Keep BB running and expose the webhook through HTTPS.
+2. Set `BB_WEBHOOK_URL` and `BB_ORBIT_WEBHOOK_SECRET`. For a public UI as well, set `BB_PUBLIC_URL` and `BB_PASSWORD`.
 3. Forward one real event and inspect its receipt.
 4. Confirm its ticket ID and project mapping.
 5. Send the same event again and confirm there is still one task.

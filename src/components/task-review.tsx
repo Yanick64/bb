@@ -20,11 +20,13 @@ export function ReviewPanel({
   send,
   pending,
   onRevise,
+  onReview,
 }: {
   task: Task;
   send: SendCommand;
   pending: boolean;
   onRevise: () => void;
+  onReview: () => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [kind, setKind] = useState<Evidence["kind"]>("screenshot");
@@ -83,13 +85,20 @@ export function ReviewPanel({
     <div className="stack">
       <div className="section-heading">
         <div>
-          <h2>Reviewwerkplek</h2>
+          <h2>Review</h2>
           <p className="muted">Beoordeel wat er werkelijk is gemaakt.</p>
         </div>
-        <Button size="sm" variant="secondary" onClick={() => setAdding(true)} disabled={pending}>
-          <Plus size={14} />
-          Bewijs toevoegen
-        </Button>
+        <div className="row wrap">
+          {task.stage === "review" ? (
+            <Button size="sm" variant="secondary" disabled={pending} onClick={onReview}>
+              Technische review met Amp
+            </Button>
+          ) : null}
+          <Button size="sm" variant="secondary" onClick={() => setAdding(true)} disabled={pending}>
+            <Plus size={14} />
+            Bewijs toevoegen
+          </Button>
+        </div>
       </div>
       {plan ? (
         <section className="panel stack">

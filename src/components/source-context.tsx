@@ -52,7 +52,12 @@ export function SourceContext({
             <span>{signal.client}</span>
             {signal.url ? (
               <ExternalLink href={signal.url}>
-                Open in {signal.provider === "orbit" ? "Orbit" : "Sentry"}
+                Open in{" "}
+                {signal.provider === "orbit"
+                  ? "Teamleader Orbit"
+                  : signal.provider === "email"
+                    ? "Google Mail"
+                    : "Sentry"}
               </ExternalLink>
             ) : (
               <span className="muted">Bronlink ontbreekt · {signal.externalId}</span>
@@ -78,8 +83,8 @@ export function SourceContext({
             <div className="source-files">
               <h3>Bijlagen</h3>
               <p className="muted small">
-                Orbit-downloadlinks verlopen na enkele minuten. Ververs de context voor nieuwe links
-                of open het ticket in Orbit.
+                Teamleader Orbit-downloadlinks verlopen na enkele minuten. Ververs de context voor
+                nieuwe links of open het ticket in Teamleader Orbit.
               </p>
               {signal.attachments.map((file) => (
                 <div className="row wrap" key={file.id}>
@@ -101,7 +106,9 @@ export function SourceContext({
               <summary>
                 {signal.provider === "orbit"
                   ? "Ticketgegevens"
-                  : "Technische context en recente gebeurtenissen"}
+                  : signal.provider === "email"
+                    ? "Vervolg van het gesprek"
+                    : "Technische context en recente gebeurtenissen"}
               </summary>
               <pre>{signal.details}</pre>
             </details>

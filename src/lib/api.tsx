@@ -8,11 +8,14 @@ export type State = {
   connections: {
     orbit: boolean;
     orbitConfigured: boolean;
+    orbitOAuth: boolean;
     orbitError: string;
     sentry: boolean;
     sentryMcp: boolean;
     amp: boolean;
     webhook: boolean;
+    webhookUrl: string;
+    googleMail: { configured: boolean; connected: boolean; email: string };
     publicUrl: string;
     orbitCatalog: { count: number; capturedAt: string } | null;
   };

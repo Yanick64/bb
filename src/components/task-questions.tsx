@@ -193,7 +193,7 @@ export function QuestionsPanel({
           open
           onClose={() => setDraft(null)}
           title="Concept voor de klant"
-          description="Pas het bericht aan en kopieer het naar e-mail of Orbit."
+          description="Pas het bericht aan en kopieer het naar e-mail of Teamleader Orbit."
         >
           <div className="dialog-body stack">
             <textarea

@@ -7,7 +7,7 @@ related_targets: ["src/styles.css", "src/components/task-detail.tsx"]
 
 # Personal ticket workbench
 
-Mode: Operate. The user chose task list plus readable ticket detail, code-first, and then delegated remaining decisions without further questions.
+Mode: Operate. The user chose project kanban boards, readable ticket detail and consistent purple action guidance, then delegated refinement without further questions.
 
 ## Direction contract
 
@@ -17,7 +17,7 @@ OWN-WORLD: White reading surfaces, cool neutral navigation, dark text and one re
 
 STORY: Scan the work list, open a ticket, read its source and conversation, then investigate, answer, approve or review. Configuration errors offer a direct route to project settings.
 
-FIRST VIEWPORT: A 224px navigation rail and a full-width task list. An opened task replaces the list with a wide document, source context on the left and a 280px action column on the right. On mobile the action becomes a compact top section and the document uses the full width.
+FIRST VIEWPORT: A 240px navigation rail and a project kanban board, with a list toggle. An opened task replaces the board with a full-width document. One purple next-action bar sits above Ticket, Vragen, Plan, Review and Activiteit. On mobile the action stacks above the document.
 
 FORM: Grounded candidate 4, the production desk's source document and decision margin. Seed 980c1b99. Other grounded candidates were issue tracker, correspondence inbox, case folder, build console, code-review queue and technical worksheet. The user's operational brief and delegation fix the selected form.
 
@@ -34,4 +34,4 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 ## Constraints
 
-Preserve user data. Remove team/account UI, not recorded history. Show complete source context, safe text rendering and original links. Distinguish deterministic launch failures from uncertain remote disconnections. Source-specific investigation must be reflected in both the UI and the agent context.
+Preserve user data. Remove team/account and time-registration UI, keeping recorded history. Show source context, safe text rendering and original links. Distinguish deterministic launch failures from uncertain remote disconnections. Source-specific investigation and project AI guidance must reach Amp. Google Mail imports one conversation per task and does not send mail.

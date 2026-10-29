@@ -6,42 +6,89 @@ import { api, type State, useAction, useToast } from "../lib/api";
 import { Field, relativeDate } from "./common";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
-export function Connections({ state }: { state: State }) {
+export function Connections({
+  state,
+  onOpenTask,
+}: {
+  state: State;
+  onOpenTask: (id: string) => void;
+}) {
   const action = useAction();
   const toast = useToast();
   const [token, setToken] = useState<{ token: string; endpoint: string } | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
+  const [checks, setChecks] = useState<Record<string, { ok: boolean; message: string }>>({});
+  async function check(id: string, path: string) {
+    setChecking(id);
+    try {
+      await api(path, {});
+      setChecks((old) => ({
+        ...old,
+        [id]: {
+          ok: true,
+          message: `Verbinding gecontroleerd om ${new Intl.DateTimeFormat("nl-NL", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`,
+        },
+      }));
+    } catch (error) {
+      setChecks((old) => ({
+        ...old,
+        [id]: { ok: false, message: error instanceof Error ? error.message : "Controle mislukt" },
+      }));
+    } finally {
+      setChecking(null);
+    }
+  }
   const receipts = useQuery({
     queryKey: ["receipts"],
     queryFn: () => api<Receipt[]>("/api/webhook-receipts"),
   });
   const cards = [
     {
+      id: "amp",
+      check: "/api/connections/amp/check",
       name: "Amp Orbs",
       subtitle: "Onderzoek en uitvoering op afstand",
       ready: state.connections.amp,
-      text: "Meld de Amp CLI aan op de BB-server en zet BB_AMP_ENABLED=true. Koppel daarna per BB-project het Amp-project. MCP's en orb-secrets beheer je in Amp.",
+      text: "Koppel per project het Amp-project. De controle leest de beschikbare projecten via je CLI-login. Tools en orb-secrets beheer je in Amp.",
       code: "amp login\nBB_AMP_ENABLED=true",
     },
     {
+      id: "orbit",
+      check: "/api/sources/orbit/check",
+      oauth: state.connections.orbitOAuth,
       name: "Teamleader Orbit",
       subtitle: "Klantselectie en ticketinvoer",
       ready: state.connections.orbit,
-      text: "Gebruik de Streamable HTTP MCP-URL van jouw Orbit-tenant. Selecteer per BB-project de Orbit-klanten. BB haalt hun tickets op via klant-ID, ook als een ticket geen Orbit-project heeft.",
-      code: "ORBIT_MCP_URL=https://…\nORBIT_MCP_TOKEN=…",
+      text: "Meld je aan met je Teamleader Orbit-account. Selecteer daarna de klanten bij je project om hun tickets op te halen.",
+      code: "ORBIT_MCP_URL=https://api.orbit.teamleader.eu/mcp",
     },
     {
+      id: "sentry",
+      check: "/api/connections/sentry/check",
+      oauth: state.connections.sentryMcp,
       name: "Sentry",
       subtitle: "Issues naar het juiste project",
       ready: state.connections.sentry,
-      text: "Verbind via Sentry MCP en geef BB toegang met je Sentry-account. Kies daarna per BB-project de Sentry-projecten. De MCP-synchronisatie haalt onopgeloste issues uit de afgelopen zeven dagen op.",
+      text: "Kies de Sentry-projecten bij je projectinstellingen. De import haalt onopgeloste issues uit de afgelopen zeven dagen op.",
       code: "SENTRY_MCP_URL=https://mcp.sentry.dev/mcp\nSENTRY_ORG=…",
     },
     {
-      name: "Orbit-webhook",
+      id: "mail",
+      check: "/api/connections/mail/check",
+      name: "Google Mail",
+      subtitle: state.connections.googleMail.email || "Gesprekken omzetten naar taken",
+      ready: state.connections.googleMail.configured,
+      text: "Zoek een gesprek en maak er een taak van. De verbinding gebruikt je bestaande Google Workspace MCP-aanmelding en leest alleen berichten.",
+      code: "GOOGLE_WORKSPACE_CONFIG=./data/google-workspace.json\nGOOGLE_WORKSPACE_EMAIL=…",
+    },
+    {
+      id: "webhook",
+      check: "/api/connections/webhook/check",
+      name: "Teamleader Orbit-webhook",
       subtitle: "Nieuwe tickets direct ontvangen",
       ready: state.connections.webhook,
-      text: "Laat Orbit of je bestaande ontvanger JSON doorsturen naar dit endpoint. Gebruik Authorization: Bearer met het webhookgeheim, of X-BB-Signature met sha256=HMAC van de ongewijzigde requestbody.",
-      code: "POST /api/webhooks/orbit\nBB_ORBIT_WEBHOOK_SECRET=…",
+      text: "Laat Teamleader Orbit of je bestaande ontvanger meldingen doorsturen. De controle test de publieke route met het lokale webhookgeheim, zonder een taak aan te maken.",
+      code: `POST ${state.connections.webhookUrl || "/api/webhooks/orbit"}\nAuthorization: Bearer <BB_ORBIT_WEBHOOK_SECRET>`,
     },
   ];
   return (
@@ -60,68 +107,68 @@ export function Connections({ state }: { state: State }) {
             <h2>{card.name}</h2>
             <p className="muted">{card.subtitle}</p>
             <p>{card.text}</p>
-            <pre>{card.code}</pre>
-            {card.name === "Teamleader Orbit" && state.connections.orbitConfigured ? (
-              <>
+            <details>
+              <summary>Configuratie</summary>
+              <pre>{card.code}</pre>
+            </details>
+            <div className="connection-controls">
+              <Button
+                variant="secondary"
+                disabled={checking !== null || action.isPending}
+                onClick={() => void check(card.id, card.check)}
+              >
+                <RefreshCw size={15} className={checking === card.id ? "spin" : ""} />
+                {checking === card.id ? "Verbinding controleren…" : "Verbinding controleren"}
+              </Button>
+              {card.oauth ? (
                 <Button
-                  variant="secondary"
-                  disabled={action.isPending}
+                  variant="ghost"
+                  disabled={action.isPending || checking !== null}
                   onClick={() =>
                     action.mutate(
-                      { path: "/api/sources/orbit/check", body: {} },
-                      { onSuccess: () => toast("Orbit-verbinding gecontroleerd") },
+                      { path: `/api/${card.id}/oauth/start`, body: {} },
+                      {
+                        onSuccess: (data) => {
+                          const { url } = data as { url: string | null };
+                          if (url) window.location.assign(url);
+                          else toast(`${card.name} is verbonden`);
+                        },
+                      },
                     )
                   }
                 >
-                  Verbinding controleren
+                  {card.ready ? "Opnieuw aanmelden" : "Aanmelden"}
                 </Button>
-                {state.connections.orbitError ? (
-                  <p className="inline-error">{state.connections.orbitError}</p>
-                ) : null}
-              </>
-            ) : null}
-            {card.name === "Sentry" && state.connections.sentryMcp ? (
-              <Button
-                disabled={action.isPending}
-                onClick={() =>
-                  action.mutate(
-                    { path: "/api/sentry/oauth/start", body: {} },
-                    {
-                      onSuccess: (data) => {
-                        const { url } = data as { url: string | null };
-                        if (url) window.location.assign(url);
-                        else toast("Sentry MCP is verbonden");
-                      },
-                    },
-                  )
-                }
-              >
-                {card.ready ? "Sentry-login vernieuwen" : "Verbind Sentry via MCP"}
-              </Button>
+              ) : null}
+            </div>
+            {checks[card.id] ? (
+              <p role="status" className={checks[card.id].ok ? "text-green small" : "inline-error"}>
+                {checks[card.id].message}
+              </p>
             ) : null}
           </section>
         ))}
       </div>
       {state.connections.orbitCatalog ? (
         <p className="notice">
-          Er staan {state.connections.orbitCatalog.count} Orbit-klanten in de lokale catalogus,
-          opgehaald op {relativeDate(state.connections.orbitCatalog.capturedAt)}. Selecteer ze bij
-          Projectinstellingen. Deze momentopname bevat alleen klantnamen en ID's.
+          Er staan {state.connections.orbitCatalog.count} Teamleader Orbit-klanten in de lokale
+          catalogus, opgehaald op {relativeDate(state.connections.orbitCatalog.capturedAt)}.
+          Selecteer ze bij Projectinstellingen. Deze momentopname bevat alleen klantnamen en ID's.
         </p>
       ) : null}
       <p className="notice">
-        Zet verbindingsgegevens in het lokale <code>.env</code>-bestand en herstart BB. Geheimen
-        worden niet in Git opgeslagen. E-mailinvoer en routingregels volgen later.
+        Zet verbindingsgegevens in het lokale <code>.env</code>-bestand en herstart de werkplek.
+        Geheimen worden niet in Git opgeslagen.
       </p>
       <section className="panel stack">
         <div className="section-heading">
           <div>
             <h2>
-              <KeyRound size={18} /> BB MCP voor Amp
+              <KeyRound size={18} /> Taaktoegang voor Amp
             </h2>
             <p className="muted">
               Laat Amp taakcontext lezen, vragen stellen en bewijs toevoegen. Iedere sleutel geeft
-              toegang tot één BB-project.
+              toegang tot één project.
             </p>
           </div>
         </div>
@@ -150,7 +197,7 @@ export function Connections({ state }: { state: State }) {
         ))}
         <small className="muted">
           Een nieuwe sleutel vervangt de vorige. Plannen goedkeuren en taken afronden blijven
-          menselijke acties in BB.
+          menselijke acties in deze werkplek.
         </small>
       </section>
       <section className="panel stack">
@@ -176,12 +223,27 @@ export function Connections({ state }: { state: State }) {
           </Button>
         </div>
         {receipts.error ? <p className="inline-error">{receipts.error.message}</p> : null}
-        {!receipts.data?.length ? <p className="muted">Nog geen webhooks ontvangen.</p> : null}
+        {receipts.isPending ? (
+          <p className="muted" role="status">
+            Webhooks ophalen…
+          </p>
+        ) : !receipts.error && !receipts.data?.length ? (
+          <p className="muted">Nog geen webhooks ontvangen.</p>
+        ) : null}
         {receipts.data?.map((receipt) => (
           <details className="webhook-receipt" key={receipt.id}>
             <summary>
-              <span className="badge">{receipt.status}</span> {relativeDate(receipt.receivedAt)}{" "}
-              <code>{receipt.id.slice(0, 10)}</code>
+              <span className="badge">
+                {
+                  {
+                    pending: "Wacht op verwerking",
+                    processed: "Verwerkt",
+                    needs_mapping: "Ticket koppelen",
+                    failed: "Mislukt",
+                  }[receipt.status]
+                }
+              </span>{" "}
+              {relativeDate(receipt.receivedAt)} <code>{receipt.id.slice(0, 10)}</code>
             </summary>
             {receipt.error ? <p className="inline-error">{receipt.error}</p> : null}
             <pre>{JSON.stringify(receipt.payload, null, 2)}</pre>
@@ -207,7 +269,7 @@ export function Connections({ state }: { state: State }) {
                     });
                   }}
                 >
-                  <Field label="Orbit ticket-api_id">
+                  <Field label="Teamleader Orbit ticket-api_id">
                     <input name="ticketId" required pattern="TC[A-Z0-9]{13}" placeholder="TC…" />
                   </Field>
                   <Button size="sm" disabled={action.isPending}>
@@ -216,7 +278,20 @@ export function Connections({ state }: { state: State }) {
                 </form>
               </div>
             ) : (
-              <p className="text-green">Verwerkt naar een BB-taak.</p>
+              <div className="row wrap">
+                <p className="text-green">Verwerkt naar een taak.</p>
+                {receipt.taskId ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      if (receipt.taskId) onOpenTask(receipt.taskId);
+                    }}
+                  >
+                    Taak openen
+                  </Button>
+                ) : null}
+              </div>
             )}
           </details>
         ))}

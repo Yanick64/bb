@@ -3,7 +3,7 @@ import { Check, Link2, Search, X } from "lucide-react";
 import { useState } from "react";
 import type { AmpProject } from "../../server/amp-projects";
 import type { SourceProject } from "../../server/connectors";
-import type { Project, ProjectInput } from "../../shared/domain";
+import { type Project, type ProjectInput, phaseLabels, projectInput } from "../../shared/domain";
 import { api, useAction, useToast } from "../lib/api";
 import { Field } from "./common";
 import { Button } from "./ui/button";
@@ -11,15 +11,7 @@ import { Dialog } from "./ui/dialog";
 
 export function ProjectDialog({ project, onClose }: { project?: Project; onClose: () => void }) {
   const [form, setForm] = useState<ProjectInput>(
-    project ?? {
-      name: "",
-      description: "",
-      color: "purple",
-      ampProject: "",
-      repository: "",
-      qualityCommands: "",
-      mappings: [],
-    },
+    () => project ?? { ...projectInput.parse({ name: "Nieuw project" }), name: "" },
   );
   const [provider, setProvider] = useState<"orbit" | "sentry">("orbit");
   const [query, setQuery] = useState("");
@@ -177,12 +169,74 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
           />
         </Field>
         <section className="section-divider">
+          <h3>AI-context</h3>
+          <p className="muted">Deze afspraken gaan mee bij elke Amp-uitvoering in dit project.</p>
+          <div className="stack">
+            <Field
+              label="Projectkennis en afspraken"
+              hint="Product, gebruikers, technische keuzes en beperkingen."
+            >
+              <textarea
+                rows={4}
+                maxLength={12000}
+                value={form.guidance.context}
+                onChange={(e) => change("guidance", { ...form.guidance, context: e.target.value })}
+                placeholder="Bijvoorbeeld: de klant gebruikt het portaal vooral op tablets. Behoud bestaande URL's."
+              />
+            </Field>
+            <Field
+              label="Klantcommunicatie"
+              hint="Taal, toon, aanspreekvorm en gewenste hoeveelheid uitleg."
+            >
+              <textarea
+                rows={3}
+                maxLength={6000}
+                value={form.guidance.communication}
+                onChange={(e) =>
+                  change("guidance", { ...form.guidance, communication: e.target.value })
+                }
+                placeholder="Bijvoorbeeld: schrijf in het Nederlands, spreek aan met je en vat het resultaat kort samen. Vermijd technische termen."
+              />
+            </Field>
+            <details className="phase-guidance">
+              <summary>
+                Extra instructies per stap <span className="muted">· optioneel</span>
+              </summary>
+              <p className="muted">
+                Amp krijgt alleen de instructies voor de stap die op dat moment loopt. Goedkeuring
+                en review blijven nodig.
+              </p>
+              <div className="stack">
+                {Object.entries(phaseLabels).map(([key, label]) => {
+                  const phase = key as keyof typeof phaseLabels;
+                  return (
+                    <Field key={phase} label={label}>
+                      <textarea
+                        rows={2}
+                        maxLength={4000}
+                        value={form.guidance.phases[phase]}
+                        onChange={(e) =>
+                          change("guidance", {
+                            ...form.guidance,
+                            phases: { ...form.guidance.phases, [phase]: e.target.value },
+                          })
+                        }
+                        placeholder={`Aanvullende afspraken voor ${label.toLowerCase()}…`}
+                      />
+                    </Field>
+                  );
+                })}
+              </div>
+            </details>
+          </div>
+        </section>
+        <section className="section-divider">
           <h3>
             <Link2 size={16} /> Gekoppelde bronnen
           </h3>
           <p className="muted">
-            Selecteer één of meerdere Orbit-klanten. Hun tickets komen op dit board, ook zonder
-            Orbit-project. Koppel daarnaast de Sentry-projecten die erbij horen.
+            Selecteer één of meerdere Teamleader Orbit-klanten. Hun tickets komen op dit board, ook
+            zonder Teamleader Orbit-project. Koppel daarnaast de Sentry-projecten die erbij horen.
           </p>
           <div className="mapped-sources">
             {form.mappings.map((m) => (
@@ -192,8 +246,8 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
                   <small>
                     {m.provider === "orbit"
                       ? m.scope === "client"
-                        ? "Orbit-klant"
-                        : "Orbit-project, bestaande koppeling"
+                        ? "Teamleader Orbit-klant"
+                        : "Teamleader Orbit-project, bestaande koppeling"
                       : "Sentry-project"}{" "}
                     · {m.externalId}
                   </small>
@@ -225,11 +279,13 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
                 setPage(1);
               }}
             >
-              <option value="orbit">Orbit-klanten</option>
+              <option value="orbit">Teamleader Orbit-klanten</option>
               <option value="sentry">Sentry-projecten</option>
             </select>
             <input
-              aria-label={provider === "orbit" ? "Zoek Orbit-klanten" : "Zoek Sentry-projecten"}
+              aria-label={
+                provider === "orbit" ? "Zoek Teamleader Orbit-klanten" : "Zoek Sentry-projecten"
+              }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={provider === "orbit" ? "Zoek klantnaam…" : "Zoek Sentry-project…"}
@@ -251,7 +307,10 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
           ) : null}
           {sources.data?.snapshotAt ? (
             <p className="notice">
-              Lokale {provider === "orbit" ? "Orbit-klantencatalogus" : "Sentry-projectcatalogus"}{" "}
+              Lokale{" "}
+              {provider === "orbit"
+                ? "Teamleader Orbit-klantencatalogus"
+                : "Sentry-projectcatalogus"}{" "}
               van {new Date(sources.data.snapshotAt).toLocaleDateString("nl-NL")}. Configureer de
               verbinding voor actuele {provider === "orbit" ? "tickets" : "issues"}.
             </p>

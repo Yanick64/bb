@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   ListChecks,
   LoaderCircle,
+  Mail,
   Menu,
   Moon,
   MoreHorizontal,
@@ -43,6 +44,9 @@ const ProjectDialog = lazy(() =>
   import("./components/project-dialog").then((m) => ({ default: m.ProjectDialog })),
 );
 const NewTask = lazy(() => import("./components/new-task").then((m) => ({ default: m.NewTask })));
+const MailInbox = lazy(() =>
+  import("./components/mail-inbox").then((m) => ({ default: m.MailInbox })),
+);
 
 export function App() {
   const auth = useQuery({
@@ -114,7 +118,7 @@ function Factory() {
   const [editProject, setEditProject] = useState<Project | "new" | null>(null);
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("all");
-  const [layout, setLayout] = useState<"list" | "board">("list");
+  const [layout, setLayout] = useState<"list" | "board">("board");
   const [mobileNav, setMobileNav] = useState(false);
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   useEffect(() => {
@@ -145,6 +149,7 @@ function Factory() {
   function navigate(next: string) {
     setSelectedId(null);
     setView(next);
+    setLayout("board");
     const url = new URL(location.href);
     url.searchParams.set("view", next);
     url.searchParams.delete("task");
@@ -207,6 +212,7 @@ function Factory() {
       all: "Alle taken",
       projects: "Projecten",
       connections: "Verbindingen",
+      mail: "Google Mail",
     }[view] ??
     "Volgende acties";
   const subtitle =
@@ -217,6 +223,7 @@ function Factory() {
       all: "Al het werk, van eerste vraag tot oplevering.",
       projects: "Jouw projecten, met de bronnen die jij kiest.",
       connections: "Verbind de bronnen en tools van je werkruimte.",
+      mail: "Maak van een klantgesprek een taak, met de volledige correspondentie erbij.",
     }[view];
   const navItems = [
     { key: "actions", label: "Volgende acties", Icon: ListChecks, count: actions },
@@ -227,6 +234,7 @@ function Factory() {
       count: data.tasks.filter((t) => t.stage === "inbox").length,
     },
     { key: "all", label: "Alle taken", Icon: LayoutGrid },
+    { key: "mail", label: "Google Mail", Icon: Mail },
   ];
   return (
     <div className="app-shell">
@@ -381,7 +389,6 @@ function Factory() {
               task={selected}
               projects={data.projects}
               ampEnabled={data.connections.amp}
-              members={data.members}
               onClose={() => openTask(null)}
               onProjectSettings={() => {
                 const p = data.projects.find((p) => p.id === selected.projectId);
@@ -444,7 +451,7 @@ function Factory() {
                     <Plus size={16} />
                     Nieuw project
                   </Button>
-                ) : view !== "connections" ? (
+                ) : !["connections", "mail"].includes(view) ? (
                   <Button onClick={() => setNewTask(true)}>
                     <Plus size={16} />
                     Nieuwe taak
@@ -453,7 +460,21 @@ function Factory() {
               </div>
             </header>
             {view === "connections" ? (
-              <Connections state={data} />
+              <Connections state={data} onOpenTask={openTask} />
+            ) : view === "mail" ? (
+              <Suspense
+                fallback={
+                  <p className="page-body" role="status">
+                    Google Mail openen…
+                  </p>
+                }
+              >
+                <MailInbox
+                  state={data}
+                  onOpenTask={openTask}
+                  onConnections={() => navigate("connections")}
+                />
+              </Suspense>
             ) : view === "projects" ? (
               <div className="page-body">
                 <div className="project-grid">
@@ -561,7 +582,7 @@ function Factory() {
                     <option value="orbit">Teamleader Orbit</option>
                     <option value="sentry">Sentry</option>
                     <option value="manual">Handmatig</option>
-                    <option value="email">E-mail</option>
+                    <option value="email">Google Mail</option>
                   </select>
                   {project ? (
                     <fieldset className="view-switch" aria-label="Weergave">

@@ -223,7 +223,7 @@ components:
 
 2DIGITS Developmentwerkplek is a personal workspace for reading client requests and deciding what happens next. White documents, cool neutral navigation and restrained purple actions keep the task text prominent. The interface uses Dutch labels and the official 2DIGITS favicon beside a text wordmark.
 
-System UI typography supports daily operational reading. The default task list uses separators, and an opened ticket becomes a full-page document with an action column. Project boards and settings keep their existing bordered containers.
+System UI typography supports daily operational reading. Projects default to kanban; cross-project queues use separator-based lists. An opened ticket becomes a full-width document with one purple next-action bar above its tabs. Project boards and settings keep their bordered containers.
 
 **Key Characteristics:**
 - Neutral reading backgrounds in light and dark themes.
@@ -232,7 +232,7 @@ System UI typography supports daily operational reading. The default task list u
 - Purple actions, focus outlines and active-tab underlines.
 - Next actions and workflow status remain visible at narrow widths.
 
-This is a code-led record of seed `980c1b99`, with no approved visual comp. Sources are `src/styles.css`, `src/App.tsx`, `src/components/ui/button.tsx`, `src/components/common.tsx`, `src/components/task-detail.tsx` and `src/components/source-context.tsx`. Product context comes from `PRODUCT.md`; direction comes from `.impeccable/direction.md` and `.impeccable/surfaces/src-app-tsx.md`. The finish review in `.impeccable/review/finish-review.md` records `ship` for the three scored fixes. Later CSS overrides take precedence over earlier declarations.
+This is a code-led record of seed `980c1b99`, refined for the user's kanban-first preference. Sources are `src/styles.css`, `src/App.tsx` and their shared components. Product context comes from `PRODUCT.md`. The current review is recorded in `.impeccable/review/workbench-refinement.md`. Later CSS overrides take precedence over earlier declarations.
 
 ## Colors
 
@@ -259,7 +259,7 @@ Primary button text uses `on-primary`; dark mode uses `on-primary-dark`. Dark mo
 The headline and body use the system stack recorded in frontmatter. There is no separate display face. Task identifiers and inline code use the recorded monospace stack.
 
 - `headline` applies to page titles. `ticket-title` keeps a slightly looser line height and a maximum width of 36ch. Both become 26px through 680px; ticket titles retain their 1.3 line height.
-- `title` is the section-heading style. Subsections use `section`. The action-column heading uses 18px with a 1.4 line height; dialog headings use 20px.
+- `title` is the section-heading style. Subsections use `section`. The next-action heading uses 18px with a 1.4 line height; dialog headings use 20px.
 - `body` is the default content style. `reading` adds a 1.8 line height and a maximum measure of 72ch for requests and conversations.
 - `task-title` becomes 16px through 680px. Board-card titles use 15px, weight 550 and a 1.6 line height.
 - Buttons use `label`; small buttons use `label-small`. Navigation is 14px, with weight 550 only when active.
@@ -274,12 +274,12 @@ The desktop navigation rail is fixed at 240px, with a matching main-content offs
 
 The task list spans the available content width, with no rounded outer frame or side borders. Desktop columns are `minmax(210px, 2.3fr) minmax(100px, 1fr) minmax(150px, 1.3fr) minmax(100px, 0.8fr)`, separated by 20px gaps. Rows use the frontmatter padding; column headings use 12px vertical padding.
 
-The ticket workspace has a 1600px maximum width and `20px 32px 64px` padding. Its grid is `minmax(0, 1fr) 280px` with a 40px gap. The action column sticks 24px from the top, with a left divider and `24px 0 0 24px` padding. Document sections use 40px stack gaps; subsequent panel sections add a top divider and 28px top padding. The source document uses a 22px gap and source entries use 18px.
+The ticket workspace has a 1600px maximum width and `20px 32px 64px` padding. A vertical flex layout puts the next-action bar before the full-width document, with a 24px gap. The bar uses `20px 24px` padding, a purple tint and a right-aligned action. Document sections use 28px stack gaps; subsequent panel sections add a top divider and 28px top padding. The source document uses a 22px gap and source entries use 18px.
 
 ### Responsive behavior
 
-- Through 1200px, the action column becomes 240px, its left padding becomes 20px and the grid gap becomes 24px. The list hides the project column and uses `minmax(200px, 2fr) minmax(130px, 1fr) 110px`. Status stays visible.
-- Through 1000px, the ticket becomes a vertical flex layout. The action section precedes the document because it comes first in the markup. It becomes static and full width, with a top divider. Its first section uses `1fr auto`, placing the button beside its heading and description. Supporting action sections disappear, while error notices remain. The Projectinstellingen shortcut appears above the ticket.
+- Through 1200px, the list hides the project column and uses `minmax(200px, 2fr) minmax(130px, 1fr) 110px`. Status stays visible.
+- Project settings remain accessible above the ticket at every width. There is no secondary action sidebar.
 - Through 900px, the page header stacks and the top-bar date disappears. From 681px through 900px, the list hides its headings and uses `minmax(0, 1fr) auto`. The title spans both columns, with next action and status on the second row.
 - Through 680px, the main offset is zero and navigation becomes a 260px off-canvas rail. The top bar is 56px high with 16px horizontal padding. Page gutters are 20px; the header uses `28px 20px 24px`. List rows remain vertical flex stacks from the earlier mobile rule, with `20px 0` padding and 12px gaps. Later grid declarations do not change their flex display.
 - Mobile ticket padding is `12px 20px 40px`. The action heading, description and button stack. Tabs scroll horizontally, use 12px padding and omit icons. Source-comment timestamps take their own line. Forms, evidence, project cards and connection cards become single-column; generic panels use 16px padding.
@@ -303,17 +303,21 @@ Controls have small rounded corners. Navigation and notices use `rounded.navigat
 
 The shared button has four variants: primary, secondary, ghost and destructive. Default minimum height is 40px. Small buttons have a 36px minimum height; icon buttons have a 40px minimum width and height with 7px padding. Secondary hover changes both fill and border; ghost hover changes fill and text. The destructive variant has no separate hover treatment in the source.
 
-Buttons transition background and border color over 0.15s with the CSS default easing. Disabled buttons have 0.5 opacity and a not-allowed cursor. Keyboard focus uses a 2px primary outline with a 4px offset. Action-column buttons align text left and allow wrapping.
+Buttons transition background and border color over 0.15s with the CSS default easing. Disabled buttons have 0.5 opacity and a not-allowed cursor. Keyboard focus uses a 2px primary outline with a 4px offset. Next-action buttons allow wrapping.
 
 ### Inputs and search
 
-Fields have a surface fill, border stroke and the frontmatter padding. Labels sit 6px above the control. Textareas resize vertically and use a 1.7 line height. Placeholders use `faint`; carets use `primary`. Search wraps an unbordered input in a 6px-radius container with 10px horizontal padding and `min(340px, 100%)` width. Its focus outline surrounds the wrapper at a 2px offset. No custom generic input hover fill exists.
+Fields have a surface fill, border stroke and the frontmatter padding. Labels sit 6px above the control; field groups add 8px bottom margin. Textareas resize vertically and use a 1.7 line height. Placeholders use `faint`; carets use `primary`. Task search wraps an unbordered input in a 6px-radius container with 10px horizontal padding and `min(340px, 100%)` width. Its focus outline surrounds the wrapper at a 2px offset.
+
+Project AI context and customer communication are visible fields. Per-step instructions live in a disclosure. Google Mail uses a search/destination toolbar and separated conversation rows, stacking on mobile. Connection cards share **Verbinding controleren**, inline success/error feedback and a configuration disclosure; OAuth providers also offer **Aanmelden** or **Opnieuw aanmelden**.
 
 ### Navigation and tabs
 
 Navigation items have a 42px minimum height, 10px icon gap and muted text. Hover uses `soft` and `foreground`; the active item uses `surface` and `foreground`, with a purple SVG icon. Counts use muted tabular numerals. The brand uses a 32px favicon and a 19px, weight-750 text wordmark.
 
 Ticket tabs have a 48px minimum height and 14px text. Active tabs use foreground text, weight 600 and a purple underline. Arrow keys, Home and End move between tabs. Opening a ticket focuses its heading; returning to the list restores focus to its task row. The list/board toggle uses a soft rounded track and a surface-filled selected button.
+
+The tabs are Ticket, Vragen, Plan, Review and Activiteit. Questions, plans and review use the same section-heading and dashed empty-state components. Time registration has no tab or controls.
 
 ### Badges and status
 
@@ -339,7 +343,7 @@ The mobile navigation translates over 0.2s. Loading SVGs rotate over 1.2s with l
 
 - Do use the final stylesheet cascade when extending the task list or ticket workspace.
 - Do keep the written workflow status visible beside or below the next action.
-- Do preserve the project-settings shortcut through 1000px when the supporting action sections disappear.
+- Do preserve the project-settings shortcut at every width.
 - Do preserve source whitespace, readable line lengths and underlined original-source links.
 - Do use theme variables for controls and document backgrounds.
 - Do keep keyboard focus visible on rows, buttons, fields and tabs.
@@ -352,4 +356,4 @@ The mobile navigation translates over 0.2s. Loading SVGs rotate over 1.2s with l
 - Don't inherit earlier tiny metadata sizes or unused eyebrow styles as new design rules.
 - Don't treat synthetic review captures as an approved visual comp.
 
-The documented rail differs from the brief because the implementation is authoritative. Unused eyebrow styling and the generic 12px preformatted-text rule are not promoted into typography tokens; the current source-detail block uses 13px. The three reviewed fixes have no remaining findings in the recorded finish review.
+The implementation is authoritative where older direction notes differ. The mechanical scan reports advisory values from earlier stylesheet rules, including overridden typography. These are not new palette or type tokens; inspect the computed styles of the rendered page. Current review evidence covers desktop, tablet and mobile in both themes.
