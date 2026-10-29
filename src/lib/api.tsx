@@ -10,6 +10,7 @@ export type State = {
     amp: boolean;
     webhook: boolean;
     publicUrl: string;
+    orbitCatalog: { count: number; capturedAt: string } | null;
   };
 };
 export async function api<T>(path: string, body?: unknown, method = "POST"): Promise<T> {

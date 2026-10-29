@@ -1,5 +1,4 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -9,10 +8,11 @@ import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { projectInput, taskInput } from "../shared/domain";
 import { enqueue } from "./amp";
-import type { Connectors } from "./connectors";
+import { saveImage } from "./artifacts";
+import { type Connectors, parseOrbitProjects, type SourceProject } from "./connectors";
 import { seedDemo } from "./demo";
 import { createProjectToken, handleMcp } from "./mcp";
-import { AppError, id, type Store } from "./store";
+import { AppError, type Store } from "./store";
 import {
   processReceipt,
   receipts,
@@ -39,6 +39,10 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
       .update(value)
       .digest("hex");
   const loginAttempts = new Map<string, { count: number; until: number }>();
+  function catalog(provider: string): { projects: SourceProject[]; capturedAt: string } | null {
+    const value = store.setting(`catalog:${provider}`);
+    return value ? JSON.parse(value) : null;
+  }
   app.use(
     "*",
     bodyLimit({
@@ -133,6 +137,12 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
         amp: config.ampEnabled,
         webhook: Boolean(config.webhookSecret),
         publicUrl: config.publicUrl ?? "",
+        orbitCatalog: catalog("orbit")
+          ? {
+              count: catalog("orbit")?.projects.length ?? 0,
+              capturedAt: catalog("orbit")?.capturedAt ?? "",
+            }
+          : null,
       },
     }),
   );
@@ -175,6 +185,23 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
   );
   app.get("/api/sources/:provider/projects", async (c) => {
     const provider = z.enum(["orbit", "sentry"]).parse(c.req.param("provider"));
+    const snapshot = catalog(provider);
+    if (!connectors.status[provider] && snapshot) {
+      const query = (c.req.query("q") ?? "").toLocaleLowerCase();
+      const page = z.coerce
+        .number()
+        .int()
+        .min(1)
+        .parse(c.req.query("page") ?? 1);
+      const matching = snapshot.projects.filter((p) =>
+        `${p.name} ${p.client}`.toLocaleLowerCase().includes(query),
+      );
+      return c.json({
+        projects: matching.slice((page - 1) * 30, page * 30),
+        hasMore: matching.length > page * 30,
+        snapshotAt: snapshot.capturedAt,
+      });
+    }
     return c.json(
       await connectors.projects(
         provider,
@@ -187,6 +214,17 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
           .parse(c.req.query("page") ?? 1),
       ),
     );
+  });
+  app.post("/api/sources/orbit/catalog", async (c) => {
+    const { pages } = z
+      .object({ pages: z.array(z.string().max(500000)).min(1).max(100) })
+      .parse(await c.req.json());
+    const projects = pages.flatMap((page) => parseOrbitProjects(page).projects);
+    const unique = [...new Map(projects.map((p) => [p.externalId, p])).values()];
+    const snapshot = { projects: unique, capturedAt: new Date().toISOString() };
+    store.setSetting("catalog:orbit", JSON.stringify(snapshot));
+    store.changed();
+    return c.json({ count: unique.length, capturedAt: snapshot.capturedAt });
   });
   app.post("/api/tasks", async (c) =>
     c.json(store.createTask(taskInput.parse(await c.req.json())), 201),
@@ -247,17 +285,10 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     const file = body.file;
     if (!(file instanceof File) || file.size > 10 * 1024 * 1024)
       throw new AppError("Kies een PNG-, JPEG- of WebP-afbeelding van maximaal 10 MB");
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const png = bytes.slice(0, 8).join(",") === "137,80,78,71,13,10,26,10";
-    const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
-    const webp =
-      new TextDecoder().decode(bytes.slice(0, 4)) === "RIFF" &&
-      new TextDecoder().decode(bytes.slice(8, 12)) === "WEBP";
-    if (!png && !jpeg && !webp) throw new AppError("Ongeldig afbeeldingsformaat");
-    const filename = `${id()}.${png ? "png" : jpeg ? "jpg" : "webp"}`;
-    mkdirSync(join(config.dataDir, "uploads"), { recursive: true, mode: 0o700 });
-    await Bun.write(join(config.dataDir, "uploads", filename), bytes);
-    return c.json({ url: `/uploads/${filename}` }, 201);
+    return c.json(
+      { url: await saveImage(config.dataDir, new Uint8Array(await file.arrayBuffer())) },
+      201,
+    );
   });
   app.get("/uploads/:filename", async (c) => {
     const name = z

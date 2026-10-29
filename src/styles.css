@@ -14,11 +14,11 @@
   --surface: #fff;
   --sidebar: #f4f3ef;
   --foreground: #272822;
-  --muted: #77786f;
-  --faint: #aaa99f;
+  --muted: #64675e;
+  --faint: #64675e;
   --border: #e7e6e0;
   --soft: #f5f5f1;
-  --primary: #d64c1b;
+  --primary: #bd451b;
   --primary-hover: #bc3b0d;
   --orange-soft: #fff0e7;
   --green: #36745a;
@@ -37,7 +37,7 @@
   --sidebar: #1c201c;
   --foreground: #e9ebe4;
   --muted: #a5aaa0;
-  --faint: #747c70;
+  --faint: #a0a698;
   --border: #363c33;
   --soft: #292e27;
   --primary: #f08051;
@@ -1548,6 +1548,7 @@ time {
   position: relative;
 }
 .screenshot-button {
+  position: relative;
   padding: 0;
   width: 100%;
   background: var(--soft);
@@ -1729,7 +1730,8 @@ time {
 @media (min-width: 1750px) {
   .board-column {
     max-width: none;
-    flex-basis: 220px;
+    min-width: 200px;
+    flex-basis: 200px;
   }
 }
 @media (max-width: 1200px) {

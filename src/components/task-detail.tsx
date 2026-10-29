@@ -148,9 +148,29 @@ export function TaskDetail({
             id={`tab-${key}`}
             aria-controls={`panel-${key}`}
             aria-selected={tab === key}
+            tabIndex={tab === key ? 0 : -1}
             className={tab === key ? "active" : ""}
             key={key}
             onClick={() => setTab(key)}
+            onKeyDown={(event) => {
+              const tabs: Tab[] = ["overview", "questions", "plan", "review", "activity"];
+              const index = tabs.indexOf(key);
+              const target =
+                event.key === "ArrowRight"
+                  ? tabs[(index + 1) % tabs.length]
+                  : event.key === "ArrowLeft"
+                    ? tabs[(index + tabs.length - 1) % tabs.length]
+                    : event.key === "Home"
+                      ? tabs[0]
+                      : event.key === "End"
+                        ? tabs[tabs.length - 1]
+                        : null;
+              if (target) {
+                event.preventDefault();
+                setTab(target);
+                document.getElementById(`tab-${target}`)?.focus();
+              }
+            }}
           >
             <Icon size={15} />
             {label}
@@ -229,6 +249,7 @@ export function TaskDetail({
               </div>
               <textarea
                 name="summary"
+                aria-label="Triagesamenvatting"
                 key={task.summary}
                 defaultValue={task.summary}
                 rows={5}
@@ -298,6 +319,7 @@ export function TaskDetail({
               >
                 <textarea
                   name="text"
+                  aria-label="Nieuw taakbericht"
                   required
                   rows={3}
                   placeholder="Geef context, corrigeer de aanpak of voeg feedback toe…"

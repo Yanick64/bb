@@ -28,6 +28,7 @@ const app = createApp(store, connectors, {
   webhookSecret: Bun.env.BB_ORBIT_WEBHOOK_SECRET,
 });
 const worker = new AmpWorker(store, {
+  dataDir,
   enabled,
   binary: Bun.env.AMP_BIN ?? "amp",
   concurrency: Math.max(1, Math.min(4, Number(Bun.env.BB_WORKER_CONCURRENCY) || 2)),

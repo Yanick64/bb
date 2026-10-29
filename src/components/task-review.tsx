@@ -198,19 +198,19 @@ export function ReviewPanel({
                   }}
                 >
                   <img src={e.url} alt={e.title} loading="lazy" />
+                  {e.comments.map((comment, i) =>
+                    comment.x !== undefined && comment.y !== undefined ? (
+                      <span
+                        className="annotation-pin"
+                        key={comment.id}
+                        style={{ left: `${comment.x}%`, top: `${comment.y}%` }}
+                        title={comment.text}
+                      >
+                        {i + 1}
+                      </span>
+                    ) : null,
+                  )}
                 </button>
-                {e.comments.map((comment, i) =>
-                  comment.x !== undefined && comment.y !== undefined ? (
-                    <span
-                      className="annotation-pin"
-                      key={comment.id}
-                      style={{ left: `${comment.x}%`, top: `${comment.y}%` }}
-                      title={comment.text}
-                    >
-                      {i + 1}
-                    </span>
-                  ) : null,
-                )}
                 <small>
                   <MapPin size={12} />
                   Klik op de afbeelding om een opmerking te plaatsen

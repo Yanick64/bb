@@ -9,6 +9,8 @@
     "dev:web": "vite --host 127.0.0.1",
     "build": "vite build",
     "start": "bun server/index.ts",
+    "backup": "bun scripts/backup.ts",
+    "test:amp": "bun scripts/amp-smoke.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",

@@ -71,8 +71,19 @@ export type Question = z.infer<typeof questionInput> & {
 };
 export const planInput = z.object({
   summary: text,
-  steps: z.array(text.max(4000)).min(1).max(30),
-  criteria: z.array(text.max(2000)).min(1).max(30),
+  steps: z
+    .array(text.max(4000))
+    .min(1)
+    .max(30)
+    .refine((items) => new Set(items).size === items.length, "Stappen moeten uniek zijn"),
+  criteria: z
+    .array(text.max(2000))
+    .min(1)
+    .max(30)
+    .refine(
+      (items) => new Set(items).size === items.length,
+      "Acceptatiecriteria moeten uniek zijn",
+    ),
 });
 export type Plan = z.infer<typeof planInput> & {
   id: string;
@@ -81,20 +92,26 @@ export type Plan = z.infer<typeof planInput> & {
   approvedAt: string | null;
   approvedBy: string | null;
 };
-export const evidenceInput = z.object({
-  title: text.max(240),
-  kind: z.enum(["screenshot", "preview", "pull_request", "test", "document"]),
-  url: z
-    .union([httpUrl, z.string().regex(/^\/uploads\/[a-f0-9-]+\.(png|jpg|webp)$/), z.literal("")])
-    .default(""),
-  notes: z.string().max(20000).default(""),
-  revision: text.max(200),
-  side: z.enum(["before", "after", "other"]).default("other"),
-  criterion: z.string().max(2000).default(""),
-  checkStatus: z
-    .enum(["not_run", "running", "passed", "failed", "not_configured"])
-    .default("not_run"),
-});
+export const evidenceInput = z
+  .object({
+    title: text.max(240),
+    kind: z.enum(["screenshot", "preview", "pull_request", "test", "document"]),
+    url: z
+      .union([httpUrl, z.string().regex(/^\/uploads\/[a-f0-9-]+\.(png|jpg|webp)$/), z.literal("")])
+      .default(""),
+    notes: z.string().max(20000).default(""),
+    revision: text.max(200),
+    side: z.enum(["before", "after", "other"]).default("other"),
+    criterion: z.string().max(2000).default(""),
+    checkStatus: z
+      .enum(["not_run", "running", "passed", "failed", "not_configured"])
+      .default("not_run"),
+  })
+  .refine(
+    (value) =>
+      !["screenshot", "preview", "pull_request"].includes(value.kind) || Boolean(value.url),
+    { message: "Dit bewijs heeft een URL of geüploade afbeelding nodig", path: ["url"] },
+  );
 export type Evidence = z.infer<typeof evidenceInput> & {
   reviewCycle: number;
   id: string;
@@ -207,6 +224,13 @@ export function nextAction(task: Task): Action {
       tab: "questions",
     };
   const failed = task.runs.at(-1);
+  if (failed?.status === "succeeded" && failed.error)
+    return {
+      owner: "operator",
+      label: "Beoordeel het Amp-resultaat",
+      detail: failed.error,
+      tab: "activity",
+    };
   if (failed?.status === "failed")
     return {
       owner: "operator",
@@ -243,6 +267,21 @@ export function nextAction(task: Task): Action {
       detail: "Leg vast wat je hebt geleverd en aan wie.",
       tab: "overview",
     };
+  if (task.stage === "review")
+    if (
+      task.evidence.some(
+        (e) =>
+          e.planVersion === plan.version &&
+          e.reviewCycle === task.reviewCycle &&
+          e.review === "changes_requested",
+      )
+    )
+      return {
+        owner: "operator",
+        label: "Laat de feedback verwerken",
+        detail: "Er zijn aanpassingen gevraagd. Stuur de feedback naar Amp of werk het plan bij.",
+        tab: "review",
+      };
   if (task.stage === "review")
     return {
       owner: "operator",

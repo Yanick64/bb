@@ -29,7 +29,7 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
   const sources = useQuery({
     queryKey: ["sources", provider, search, page],
     queryFn: () =>
-      api<{ projects: SourceProject[]; hasMore: boolean }>(
+      api<{ projects: SourceProject[]; hasMore: boolean; snapshotAt?: string }>(
         `/api/sources/${provider}/projects?q=${encodeURIComponent(search ?? "")}&page=${page}`,
       ),
     enabled: search !== null,
@@ -188,6 +188,13 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
             </Button>
           </div>
           {sources.isFetching ? <p className="muted">Projecten ophalen…</p> : null}
+          {sources.data?.snapshotAt ? (
+            <p className="notice">
+              Lokale Orbit-momentopname van{" "}
+              {new Date(sources.data.snapshotAt).toLocaleDateString("nl-NL")}. Je kunt projecten
+              kiezen. Configureer de Orbit-verbinding voor actuele tickets.
+            </p>
+          ) : null}
           {sources.error ? <p className="inline-error">{sources.error.message}</p> : null}
           <div className="source-results">
             {sources.data?.projects.map((p) => {

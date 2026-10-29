@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import { createApp } from "../server/app";
+import { imageExtension } from "../server/artifacts";
 import { Connectors, normalizeOrbitTicket, parseOrbitProjects } from "../server/connectors";
 import { createProjectToken } from "../server/mcp";
 import { Store } from "../server/store";
@@ -174,4 +175,19 @@ test("disabled Amp never starts a thread from an API request", async () => {
     (await request(`/api/tasks/${task.id}/runs`, { revision: 1, mode: "triage" })).status,
   ).toBe(503);
   expect(store.task(task.id).runs).toHaveLength(0);
+});
+test("image uploads reject HTML and SVG masquerading as screenshots", () => {
+  expect(() => imageExtension(new TextEncoder().encode("<svg onload='alert(1)'/>"))).toThrow();
+  expect(() => imageExtension(new TextEncoder().encode("<html>not an image</html>"))).toThrow();
+  expect(imageExtension(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0]))).toBe("png");
+});
+test("local Orbit catalog is explicitly a snapshot and contains no financial columns", async () => {
+  const { request, store } = setup();
+  const page =
+    "Found 1 project(s) — showing page 1 (1 rows, pageSize 30):\n| 123 | Example site | Example client | Owner | OPEN | HOURS | 999.99 | 0 | 999.99 | 2026-10-29 |\napi_ids: PR0000000000001";
+  expect((await request("/api/sources/orbit/catalog", { pages: [page] })).status).toBe(200);
+  const response = await (await request("/api/sources/orbit/projects?q=Example&page=1")).json();
+  expect(response.projects).toHaveLength(1);
+  expect(response.snapshotAt).toBeTruthy();
+  expect(store.setting("catalog:orbit")).not.toContain("999.99");
 });

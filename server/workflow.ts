@@ -31,6 +31,14 @@ export function invalidate(task: Task) {
 }
 export function addPlan(task: Task, input: unknown) {
   const data = planInput.parse(input);
+  const latest = currentPlan(task);
+  if (
+    latest &&
+    latest.summary === data.summary &&
+    JSON.stringify(latest.steps) === JSON.stringify(data.steps) &&
+    JSON.stringify(latest.criteria) === JSON.stringify(data.criteria)
+  )
+    return;
   task.plans.push({
     ...data,
     id: id(),
@@ -45,8 +53,16 @@ export function addPlan(task: Task, input: unknown) {
   activity(task, `Plan v${task.plans.length} voorgesteld`);
 }
 export function addQuestion(task: Task, input: unknown) {
+  const data = questionInput.parse(input);
+  if (
+    task.questions.some(
+      (q) =>
+        q.question === data.question && q.recipient === data.recipient && q.blocks === data.blocks,
+    )
+  )
+    return;
   task.questions.push({
-    ...questionInput.parse(input),
+    ...data,
     id: id(),
     answer: null,
     answeredBy: null,
@@ -56,6 +72,15 @@ export function addQuestion(task: Task, input: unknown) {
 }
 export function addEvidence(task: Task, input: unknown) {
   const data = evidenceInput.parse(input);
+  if (
+    task.evidence.some(
+      (e) =>
+        e.planVersion === (currentPlan(task)?.version ?? null) &&
+        e.reviewCycle === task.reviewCycle &&
+        Object.entries(data).every(([key, value]) => e[key as keyof typeof data] === value),
+    )
+  )
+    return;
   if (data.kind === "screenshot" && !data.url)
     throw new AppError("Een screenshot heeft een afbeelding nodig");
   task.evidence.push({
@@ -68,6 +93,8 @@ export function addEvidence(task: Task, input: unknown) {
     comments: [],
   });
   task.review = null;
+  task.delivery = null;
+  if (currentPlan(task)?.approvedAt && !activeRun(task)) task.stage = "review";
   if (task.stage === "delivery" || task.stage === "done") {
     task.stage = "review";
     task.delivery = null;
@@ -214,6 +241,9 @@ export function command(store: Store, taskId: string, input: TaskCommand, revisi
   return store.update(
     taskId,
     (task) => {
+      const lastRun = task.runs.at(-1);
+      if (["plan", "evidence", "summary"].includes(cmd.type) && lastRun?.status === "succeeded")
+        lastRun.error = null;
       if (!["message", "annotate", "resolve_run"].includes(cmd.type)) requireIdle(task);
       switch (cmd.type) {
         case "stage":

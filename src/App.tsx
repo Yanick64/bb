@@ -101,7 +101,9 @@ function Factory() {
   const { data, error, isPending, live, refetch } = useFactory();
   const action = useAction();
   const toast = useToast();
-  const [view, setView] = useState("actions");
+  const [view, setView] = useState(
+    () => new URLSearchParams(location.search).get("view") ?? "actions",
+  );
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     new URLSearchParams(location.search).get("task"),
   );
@@ -116,7 +118,11 @@ function Factory() {
     localStorage.setItem("bb-theme", dark ? "dark" : "light");
   }, [dark]);
   useEffect(() => {
-    const onPop = () => setSelectedId(new URLSearchParams(location.search).get("task"));
+    const onPop = () => {
+      const params = new URLSearchParams(location.search);
+      setSelectedId(params.get("task"));
+      setView(params.get("view") ?? "actions");
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -129,6 +135,9 @@ function Factory() {
   }
   function navigate(next: string) {
     setView(next);
+    const url = new URL(location.href);
+    url.searchParams.set("view", next);
+    history.pushState({}, "", url);
     setSearch("");
     setSource("all");
     setMobileNav(false);

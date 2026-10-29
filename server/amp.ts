@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Subprocess } from "bun";
 import {
   type AgentReport,
@@ -7,6 +10,7 @@ import {
   type Run,
   type Task,
 } from "../shared/domain";
+import { archiveAmpScreenshots } from "./artifacts";
 import { AppError, activity, id, now, type Store } from "./store";
 import { applyReport, requireIdle } from "./workflow";
 
@@ -83,7 +87,7 @@ export function enqueue(
         .find(
           (r) =>
             r.threadId &&
-            r.status === "succeeded" &&
+            ["succeeded", "failed"].includes(r.status) &&
             r.projectId === project.id &&
             r.ampProject === project.ampProject,
         );
@@ -123,7 +127,13 @@ export class AmpWorker {
   private stopped = false;
   constructor(
     private store: Store,
-    private options: { enabled: boolean; binary: string; concurrency: number; timeoutMs?: number },
+    private options: {
+      enabled: boolean;
+      binary: string;
+      concurrency: number;
+      timeoutMs?: number;
+      dataDir?: string;
+    },
   ) {}
   start() {
     // A lost observer is NOT a cancelled remote run. Never auto-retry it.
@@ -151,6 +161,14 @@ export class AmpWorker {
       const run = task.runs.find((r) => r.status === "queued");
       if (run)
         void this.execute(task, run).catch((error: unknown) => {
+          this.processes.get(run.id)?.kill();
+          this.processes.delete(run.id);
+          this.finish(
+            task.id,
+            run.id,
+            "interrupted",
+            "BB kon de uitvoering niet volledig verwerken. Controleer de thread in Amp voordat je verdergaat.",
+          );
           console.error(
             "Amp observer failed",
             error instanceof Error ? error.message : "Unknown error",
@@ -162,6 +180,8 @@ export class AmpWorker {
     if (!task.projectId || this.processes.has(run.id)) return;
     const project = { ...this.store.project(run.projectId), ampProject: run.ampProject };
     let process: Subprocess<"pipe", "pipe", "pipe">;
+    // A repo-less task must never inherit BB's own Git remote.
+    const launchDirectory = mkdtempSync(join(tmpdir(), "bb-amp-"));
     try {
       this.store.update(task.id, (t) => {
         const queued = t.runs.find((r) => r.id === run.id);
@@ -174,7 +194,16 @@ export class AmpWorker {
         queued.status = "running";
         activity(t, "Amp-orb wordt gestart");
       });
-      process = Bun.spawn([this.options.binary, ...ampArgs(run, project)], {
+      const args = ampArgs(run, project);
+      if (this.options.dataDir) {
+        for (const evidence of task.evidence
+          .filter((e) => /^\/uploads\/[a-f0-9-]+\.(png|jpg|webp)$/.test(e.url))
+          .slice(-10)) {
+          args.push("--attach", join(this.options.dataDir, evidence.url.slice(1)));
+        }
+      }
+      process = Bun.spawn([this.options.binary, ...args], {
+        cwd: launchDirectory,
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
@@ -190,6 +219,7 @@ export class AmpWorker {
       process.stdin.write(run.prompt);
       process.stdin.end();
     } catch (error) {
+      rmSync(launchDirectory, { recursive: true, force: true });
       this.finish(
         task.id,
         run.id,
@@ -271,6 +301,7 @@ export class AmpWorker {
       process.kill();
     }
     const exitCode = await process.exited;
+    rmSync(launchDirectory, { recursive: true, force: true });
     clearTimeout(timeout);
     this.processes.delete(run.id);
     const final = output.result;
@@ -286,6 +317,9 @@ export class AmpWorker {
       this.finish(task.id, run.id, "failed", final.error ?? `Amp eindigde met code ${exitCode}`);
     } else {
       const text = final.result ?? "";
+      let report = parseReport(text);
+      if (report && this.options.dataDir)
+        report = await archiveAmpScreenshots(report, this.options.dataDir, this.options.binary);
       this.store.update(task.id, (t) => {
         const r = t.runs.find((r) => r.id === run.id);
         if (!r) return;
@@ -293,8 +327,10 @@ export class AmpWorker {
         r.finishedAt = now();
         r.result = text;
         t.messages.push({ id: id(), author: "amp", text, createdAt: now() });
-        const report = parseReport(text);
         if (report) applyReport(t, report, run.mode);
+        else
+          r.error =
+            "Geen geldig gestructureerd resultaat ontvangen. Bekijk de Amp-thread en leg het resultaat handmatig vast.";
         activity(
           t,
           report

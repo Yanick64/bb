@@ -64,6 +64,14 @@ export function Connections({ state }: { state: State }) {
           </section>
         ))}
       </div>
+      {state.connections.orbitCatalog ? (
+        <p className="notice">
+          Er staan {state.connections.orbitCatalog.count} echte Orbit-projecten in de lokale
+          catalogus, opgehaald op {relativeDate(state.connections.orbitCatalog.capturedAt)}.
+          Selecteer ze bij Projectinstellingen. Deze momentopname bevat projectnamen en klanten; er
+          zijn nog geen klanttickets geïmporteerd.
+        </p>
+      ) : null}
       <p className="notice">
         Zet verbindingsgegevens in het lokale <code>.env</code>-bestand en herstart BB. Geheimen
         worden niet in Git opgeslagen. E-mailinvoer en routingregels volgen later.
