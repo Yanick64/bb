@@ -165,6 +165,32 @@ export const signalInput = z.object({
   body: z.string().max(50000).default(""),
   url: optionalUrl,
   client: z.string().max(300).default(""),
+  details: z.string().max(100000).default(""),
+  fetchedAt: z.string().default(""),
+  contextWarning: z.string().max(2000).default(""),
+  comments: z
+    .array(
+      z.object({
+        id: z.string(),
+        author: z.string(),
+        date: z.string(),
+        internal: z.boolean(),
+        text: z.string().max(50000),
+      }),
+    )
+    .max(100)
+    .default([]),
+  attachments: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        size: z.number().optional(),
+        url: z.string().default(""),
+      }),
+    )
+    .max(100)
+    .default([]),
 });
 export type Signal = z.infer<typeof signalInput> & {
   id: string;

@@ -27,6 +27,7 @@ const connectors = new Connectors(
   {
     orbitUrl: Bun.env.ORBIT_MCP_URL,
     orbitToken: Bun.env.ORBIT_MCP_TOKEN,
+    orbitWebUrl: Bun.env.ORBIT_WEB_URL,
     sentryUrl: Bun.env.SENTRY_BASE_URL ?? "https://sentry.io",
     sentryToken: Bun.env.SENTRY_AUTH_TOKEN,
     sentryOrg: Bun.env.SENTRY_ORG,

@@ -43,7 +43,7 @@ export function TaskTime({
             {
               type: "log_time",
               entry: {
-                memberId: String(data.get("memberId")),
+                memberId: "self",
                 date: String(data.get("date")),
                 minutes: Number(data.get("minutes")),
                 description: String(data.get("description")),
@@ -56,16 +56,6 @@ export function TaskTime({
         }}
       >
         <div className="form-grid">
-          <Field label="Developer">
-            <select name="memberId" required defaultValue={task.assigneeId ?? ""}>
-              <option value="">Kies een teamlid</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </Field>
           <Field label="Datum">
             <input
               name="date"
@@ -103,15 +93,16 @@ export function TaskTime({
           lopende levering zijn klantwerk. Bij twijfel kies je 'Nog te beoordelen'. Amp-looptijd
           telt niet automatisch als developeruren.
         </p>
-        {!members.length ? <p className="muted">Voeg eerst een developer toe via Team.</p> : null}
-        <Button disabled={pending || !members.length}>Tijd vastleggen</Button>
+        <Button disabled={pending}>Mijn tijd vastleggen</Button>
       </form>
       {task.timeEntries.toReversed().map((entry) => (
         <section className="panel" key={entry.id}>
           <div className="row wrap">
             <strong>
               {entry.minutes} min ·{" "}
-              {members.find((m) => m.id === entry.memberId)?.name ?? "Teamlid"}
+              {entry.memberId === "self"
+                ? "Jij"
+                : (members.find((m) => m.id === entry.memberId)?.name ?? "Eerdere registratie")}
             </strong>
             <time>{entry.date}</time>
             <span className="badge">{billingLabels[entry.billing]}</span>

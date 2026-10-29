@@ -32,6 +32,7 @@ React UI <-> Hono HTTP API + SSE <-> SQLite
 | `server/store.ts`              | SQLite transactions, projects, task aggregates, signals, run events and settings        |
 | `server/workflow.ts`           | Plan approval, questions, review gates, delivery and idempotent intake                  |
 | `server/amp.ts`                | Queuing, remote CLI execution, JSON-lines consumption, thread continuation and recovery |
+| `server/amp-projects.ts`       | Accessible project discovery and requested-run preflight validation                     |
 | `server/artifacts.ts`          | Validated image storage and private Amp screenshot retrieval                            |
 | `server/connectors.ts`         | Read-only Orbit client and Sentry MCP/REST adapters                                     |
 | `server/sentry-mcp.ts`         | Persistent OAuth connection, PKCE/state checks, serialized credential operations        |
@@ -43,7 +44,7 @@ React UI <-> Hono HTTP API + SSE <-> SQLite
 
 React + Vite serves the operator UI. Hono runs on Bun. SQLite uses WAL and synchronous transactions. This first version uses Bun's SQLite driver directly rather than adding an ORM or workflow framework. Task-local questions, plans and evidence are stored together as JSON; globally unique signal identities and run events have their own tables.
 
-This design assumes one server process per database. It does not claim distributed leases or multi-node scheduling. Before team-scale operation, add database migrations, relational indexes for growing collections, per-user identity and an explicit worker lease protocol.
+This design assumes one operator and one server process per database. It does not implement distributed leases or multi-node scheduling.
 
 ## Workflow rules
 
@@ -58,7 +59,7 @@ This design assumes one server process per database. It does not claim distribut
 - Review requires accepted evidence for every criterion at the current code/document revision. Failed, unconfigured, running or unrun checks cannot be treated as passed.
 - Delivery records what was delivered. It requires the accepted current review and no unresolved blocking questions.
 - Delivery drafts carry the plan version and review cycle. New scope or implementation invalidates them. If no current draft exists, BB builds an editable note from accepted evidence. Technical review and delivery agent runs cannot grant human approval.
-- A task has one optional roster assignee. Local time entries identify a roster member, actual minutes, date, classification and agreement. Roster membership is not authentication or authority to approve work.
+- Personal time entries use the reserved `self` identity. Recorded member IDs and assignment history are preserved for compatibility, while the UI has no team or assignment controls.
 - A successful Amp process is an execution result, not human acceptance. Malformed structured output produces a manual-review action.
 
 ## Recovery and idempotency
@@ -67,7 +68,7 @@ Source creation and signal association share a SQLite transaction. A unique prov
 
 Mutations from the UI carry the task revision. A stale request returns 409 rather than overwriting intervening work. The worker stores a queued run before launching Amp and marks it running before starting the CLI. On restart, running turns become interrupted, since their remote orbs may still be working. Queued work remains queued.
 
-There is no claim of exactly-once remote thread creation. If the CLI loses the connection before returning a thread ID, BB requires manual reconciliation. It does not automatically retry a possibly successful external operation.
+There is no claim of exactly-once remote thread creation. Unknown exits require reconciliation. The one deterministic exception is the CLI's inaccessible-project error, with a nonzero exit, no observer failure and no thread ID. That startup is failed and can be retried after correcting the mapping. Existing threads always retain uncertain-execution handling when no final result arrives.
 
 SSE announces changes, but the database is authoritative. Disconnecting the UI does not discard task history. An interrupted BB process does not imply a cancelled Amp orb.
 
@@ -81,6 +82,10 @@ Preview links open externally. Embedded Amp Portals and imported Portal annotati
 
 Orbit's inspected `ListProjects` output is a Markdown table with a separate ordered API-ID list. The adapter validates column count and row/ID alignment and stops on unexpected shapes. Ticket detail is structured JSON. Contract tests use synthetic fixtures rather than customer records.
 
-Incoming webhook bodies are persisted before enrichment. Known ticket IDs are resolved through `GetTicketDetail`; normalized BB signal envelopes work directly. Unknown shapes remain inspectable for mapping. Failed enrichment is retained for an explicit retry.
+Incoming webhook bodies are persisted before enrichment. Known ticket IDs are resolved through `GetTicketDetail` and `ListTicketComments`; normalized BB signal envelopes work directly. Unknown shapes remain inspectable for mapping. Failed enrichment is retained for an explicit retry.
+
+Signals store body, source URL, structured comments, attachment metadata, deeper details, fetch time and an optional context warning. Refresh updates the existing source identity and fills empty or unchanged source-derived descriptions. Operator-authored descriptions and workflow history are preserved. Requested triage/planning refreshes source context before building the prompt without changing the task revision; concurrent operator changes still reject the run as stale.
+
+Sentry MCP provides issue details and ten recent events. Failed refresh retains the last snapshot and marks the missing access. Prompts distinguish missing evidence from a complete investigation. Orbit links use the tenant web origin and ticket number; attachment links remain short-lived and are not archived as permanent files.
 
 Email is a later connector. The intended model separates client identity rules from project routing rules. Conflicting matches belong in the shared inbox. The current app does not claim Gmail ingestion or regex routing is implemented.

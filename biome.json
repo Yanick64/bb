@@ -11,5 +11,6 @@
     }
   },
   "css": { "parser": { "tailwindDirectives": true } },
+  "markdown": { "parser": { "frontmatter": true } },
   "javascript": { "formatter": { "quoteStyle": "double", "semicolons": "always" } }
 }

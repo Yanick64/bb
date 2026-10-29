@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Member, Project, ProjectInput, Signal, Task } from "../shared/domain";
-import { mappingSchema, taskInput } from "../shared/domain";
+import { mappingSchema, signalInput, taskInput } from "../shared/domain";
 
 export class AppError extends Error {
   constructor(
@@ -149,7 +149,10 @@ export class Store {
           .query<{ data: string }, [string]>("SELECT data FROM signals WHERE task_id=?")
           .all(taskId)
       : this.db.query<{ data: string }, []>("SELECT data FROM signals").all();
-    return rows.map((r) => JSON.parse(r.data));
+    return rows.map((r) => {
+      const signal = JSON.parse(r.data) as Signal;
+      return { ...signal, ...signalInput.parse(signal) };
+    });
   }
   setting(key: string) {
     return this.db
@@ -160,6 +163,7 @@ export class Store {
     return JSON.parse(this.setting("members") ?? "[]");
   }
   member(memberId: string) {
+    if (memberId === "self") return { id: "self", name: "Jij" };
     const member = this.members().find((m) => m.id === memberId);
     if (!member) throw new AppError("Teamlid niet gevonden", 404);
     return member;

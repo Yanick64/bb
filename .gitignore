@@ -11,3 +11,6 @@ coverage/
 test-results/
 .amp/portals/
 .amp/in/artifacts/
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/config.local.json

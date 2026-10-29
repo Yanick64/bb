@@ -1,7 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { decodeHTML } from "entities";
 import { z } from "zod";
-import type { ProjectInput, Signal } from "../shared/domain";
+import { type ProjectInput, signalInput } from "../shared/domain";
 import type { SentryMcp } from "./sentry-mcp";
 import { AppError, type Store } from "./store";
 import { ingest } from "./workflow";
@@ -93,30 +94,128 @@ export function parseOrbitClients(
   });
   return { clients, hasMore: Number(paging[1]) > Number(paging[2]) * pageSize };
 }
-const orbitTicket = z.object({
-  ticketId: z.string().regex(/^TC[A-Z0-9]{13}$/),
-  name: z.string(),
-  description: z.string().nullish(),
-  client: z.string().nullish(),
-  clientId: z.string().nullish(),
-  projectId: z.string().nullish(),
-});
-export function normalizeOrbitTicket(input: unknown) {
+const orbitTicket = z
+  .object({
+    ticketId: z.string().regex(/^TC[A-Z0-9]{13}$/),
+    name: z.string(),
+    description: z.string().nullish(),
+    client: z.string().nullish(),
+    clientId: z.string().nullish(),
+    projectId: z.string().nullish(),
+    number: z.union([z.string(), z.number()]).optional(),
+    url: z.string().optional(),
+    attachments: z
+      .array(
+        z.object({
+          fileId: z.string(),
+          name: z.string(),
+          sizeBytes: z.number().optional(),
+          downloadUrl: z.string().optional(),
+        }),
+      )
+      .default([]),
+  })
+  .passthrough();
+export function sourceText(value: string) {
+  return decodeHTML(
+    value
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<(?:br\s*\/?|\/p|\/div|\/li|\/tr)>/gi, "\n")
+      .replace(
+        /<a\b[^>]*href=["']((?:https?:\/\/|mailto:)[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+        "$2 [$1]",
+      )
+      .replace(/<\/?[A-Za-z][A-Za-z0-9:-]*(?:\s[^>]*)?\s*\/?>/g, ""),
+  )
+    .replaceAll("\u00a0", " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+export function normalizeOrbitTicket(input: unknown, conversation?: unknown, baseUrl?: string) {
   const ticket = orbitTicket.parse(input);
-  return {
+  const thread = z
+    .object({
+      count: z.number().optional(),
+      comments: z.array(
+        z.object({
+          commentId: z.string(),
+          date: z.string().nullish(),
+          author: z.string().nullish(),
+          isInternal: z.boolean(),
+          content: z.string().nullish(),
+        }),
+      ),
+    })
+    .parse(conversation ?? { comments: [] });
+  const comments = thread.comments
+    .toReversed()
+    .map((c) => ({
+      id: c.commentId,
+      date: c.date ?? "",
+      author: c.author ?? "Onbekend",
+      internal: c.isInternal,
+      text: sourceText(c.content ?? "").slice(0, 50000),
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const description = sourceText(ticket.description ?? "");
+  return signalInput.parse({
     provider: "orbit" as const,
     externalId: ticket.ticketId,
     externalProjectId: ticket.projectId ?? "",
     externalClientId: ticket.clientId ?? "",
     title: ticket.name.slice(0, 240),
-    body: ticket.description ?? "",
+    body: (description || comments.find((c) => !c.internal && c.text)?.text || "").slice(0, 50000),
     client: ticket.client ?? "",
-    url: "",
-  };
+    url:
+      ticket.url ||
+      (baseUrl && ticket.number
+        ? new URL(`/ticket/${encodeURIComponent(ticket.number)}`, baseUrl).href
+        : ""),
+    fetchedAt: conversation ? new Date().toISOString() : "",
+    contextWarning:
+      thread.comments.length >= 100 || (thread.count ?? 0) > comments.length
+        ? "Orbit geeft maximaal 100 berichten terug. Bekijk de bron voor eerdere berichten."
+        : !conversation
+          ? "De ticketconversatie is nog niet opgehaald."
+          : "",
+    comments,
+    details: JSON.stringify(
+      Object.fromEntries(
+        [
+          "number",
+          "state",
+          "priority",
+          "contact",
+          "source",
+          "queue",
+          "owner",
+          "assignee",
+          "project",
+          "billable",
+          "slaResponseDue",
+          "slaCloseDue",
+          "followUpAction",
+          "followUpDate",
+        ]
+          .filter((key) => ticket[key] !== undefined && ticket[key] !== null)
+          .map((key) => [key, ticket[key]]),
+      ),
+      null,
+      2,
+    ),
+    attachments: ticket.attachments.map((a) => ({
+      id: a.fileId,
+      name: a.name,
+      size: a.sizeBytes,
+      url: /^https?:\/\//.test(a.downloadUrl ?? "") ? a.downloadUrl : "",
+    })),
+  });
 }
 export type ConnectorConfig = {
   orbitUrl?: string;
   orbitToken?: string;
+  orbitWebUrl?: string;
   sentryUrl: string;
   sentryToken?: string;
   sentryOrg?: string;
@@ -163,7 +262,7 @@ export class Connectors {
     };
   }
   async orbitCall(
-    name: "ListProjects" | "ListClients" | "GetTicketDetail" | "ListTickets",
+    name: "ListProjects" | "ListClients" | "GetTicketDetail" | "ListTickets" | "ListTicketComments",
     args: Record<string, unknown>,
   ) {
     if (!this.config.orbitUrl)
@@ -281,7 +380,69 @@ export class Connectors {
     );
   }
   async ticket(ticketId: string) {
-    return normalizeOrbitTicket(await this.orbitCall("GetTicketDetail", { ticketId }));
+    const detail = await this.orbitCall("GetTicketDetail", { ticketId });
+    const comments = await this.orbitCall("ListTicketComments", {
+      ticketId,
+      includeInternal: "true",
+      limit: 100,
+    });
+    return normalizeOrbitTicket(detail, comments, this.config.orbitWebUrl);
+  }
+  async refreshContext(store: Store, taskId: string, updateDescription = true) {
+    const warnings: string[] = [];
+    for (const signal of store.signals(taskId)) {
+      try {
+        if (signal.provider === "orbit")
+          ingest(store, await this.ticket(signal.externalId), undefined, updateDescription);
+        else if (signal.provider === "sentry") {
+          if (!this.sentryMcp?.connected)
+            throw new AppError(
+              "Verbind Sentry via MCP om stacktraces en recente gebeurtenissen op te halen.",
+              503,
+            );
+          const [organization, ...parts] = signal.externalId.split(":");
+          const issueId = parts.join(":");
+          const detail = unwrapMcp(
+            await this.sentryMcp.call("get_sentry_resource", {
+              resourceType: "issue",
+              organizationSlug: organization,
+              resourceId: issueId,
+            }),
+          );
+          const events = unwrapMcp(
+            await this.sentryMcp.call("search_issue_events", {
+              organizationSlug: organization,
+              issueId,
+              regionUrl: this.config.sentryUrl,
+              query: "",
+              period: "7d",
+              limit: 10,
+            }),
+          );
+          const format = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v, null, 2));
+          ingest(
+            store,
+            {
+              ...signal,
+              details: `${format(detail)}\n\nRecent events\n${format(events)}`.slice(0, 100000),
+              fetchedAt: new Date().toISOString(),
+              contextWarning: "",
+            },
+            undefined,
+            updateDescription,
+          );
+        }
+      } catch (error) {
+        const warning =
+          error instanceof AppError ? error.message : "Broncontext kon niet worden vernieuwd.";
+        warnings.push(warning);
+        store.db
+          .query("UPDATE signals SET data=? WHERE id=?")
+          .run(JSON.stringify({ ...signal, contextWarning: warning }), signal.id);
+        store.changed();
+      }
+    }
+    return { warnings, signals: store.signals(taskId) };
   }
   async sync(store: Store, projectId: string) {
     const project = store.project(projectId);
@@ -291,7 +452,7 @@ export class Connectors {
     const errors: { source: string; message: string }[] = [];
     for (const mapping of project.mappings) {
       try {
-        let signals: Omit<Signal, "id" | "taskId" | "receivedAt">[];
+        let signals: z.input<typeof signalInput>[];
         if (mapping.provider === "orbit") {
           const data = z.object({ tickets: z.array(orbitTicket) }).parse(
             await this.orbitCall("ListTickets", {
@@ -305,16 +466,6 @@ export class Connectors {
           limited ||= data.tickets.length === 100;
           signals = [];
           for (const ticket of data.tickets) {
-            if (
-              store
-                .signals()
-                .some(
-                  (signal) => signal.provider === "orbit" && signal.externalId === ticket.ticketId,
-                )
-            ) {
-              duplicate++;
-              continue;
-            }
             signals.push(await this.ticket(ticket.ticketId));
           }
         } else if (this.sentryMcp?.connected) {

@@ -117,7 +117,10 @@ export class SentryMcp {
       }
     });
   }
-  async call(name: "find_projects" | "search_issues", args: Record<string, unknown>) {
+  async call(
+    name: "find_projects" | "search_issues" | "get_sentry_resource" | "search_issue_events",
+    args: Record<string, unknown>,
+  ) {
     return this.exclusive(async () => {
       if (!this.connected) throw new AppError("Verbind Sentry via MCP in Verbindingen", 503);
       const client = new Client({ name: "bb", version: "0.1.0" });

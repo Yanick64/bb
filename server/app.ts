@@ -8,6 +8,7 @@ import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { mappingSchema, projectInput, taskInput } from "../shared/domain";
 import { commandAndContinue, enqueue } from "./amp";
+import { listAmpProjects, validateAmpProject } from "./amp-projects";
 import { saveImage } from "./artifacts";
 import {
   type Connectors,
@@ -340,6 +341,12 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
         revision: z.number().int().positive(),
       })
       .parse(await c.req.json());
+    const task = store.task(c.req.param("id"));
+    if (task.revision !== data.revision)
+      throw new AppError("De taak is intussen gewijzigd. Controleer de actuele gegevens.", 409);
+    if (task.projectId) await validateAmpProject(store.project(task.projectId).ampProject);
+    if (["triage", "plan"].includes(data.mode))
+      await connectors.refreshContext(store, task.id, false);
     return c.json(
       enqueue(store, c.req.param("id"), data.mode, data.instruction, data.revision),
       202,
@@ -351,6 +358,11 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
       signals: store.signals(c.req.param("id")),
       events: store.events(c.req.param("id")),
     });
+  });
+  app.get("/api/amp/projects", async (c) => c.json({ projects: await listAmpProjects() }));
+  app.post("/api/tasks/:id/context/refresh", async (c) => {
+    store.task(c.req.param("id"));
+    return c.json(await connectors.refreshContext(store, c.req.param("id")));
   });
   app.post("/api/signals", async (c) => {
     const body = z

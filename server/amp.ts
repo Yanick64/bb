@@ -360,7 +360,21 @@ export class AmpWorker {
     clearTimeout(timeout);
     this.processes.delete(run.id);
     const final = output.result;
-    if (observerError || !final) {
+    const thread = this.store.task(task.id).runs.find((r) => r.id === run.id)?.threadId;
+    if (
+      !observerError &&
+      !final &&
+      exitCode !== 0 &&
+      !thread &&
+      /(?:^|\n)Error: No accessible Amp project matches "[^"\n]+"\s*$/.test(stderr)
+    ) {
+      this.finish(
+        task.id,
+        run.id,
+        "failed",
+        `Amp kon niet starten: project "${run.ampProject}" is niet toegankelijk. Kies het juiste project via Projectinstellingen.`,
+      );
+    } else if (observerError || !final) {
       this.finish(
         task.id,
         run.id,

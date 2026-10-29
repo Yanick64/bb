@@ -2,8 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   ArrowUpRight,
-  Boxes,
-  CheckCheck,
   ChevronRight,
   CircleHelp,
   CirclePlus,
@@ -22,7 +20,6 @@ import {
   Settings2,
   Sparkles,
   Sun,
-  Users,
   X,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -36,7 +33,6 @@ import {
 } from "../shared/domain";
 import { Empty, Field, Priority, SourceBadge } from "./components/common";
 import { Connections } from "./components/connections";
-import { Team } from "./components/team";
 import { Button } from "./components/ui/button";
 import { api, useAction, useFactory, useToast } from "./lib/api";
 
@@ -58,14 +54,14 @@ export function App() {
   if (auth.isPending)
     return (
       <div className="loading-screen">
-        <span className="brand-mark">bb</span>
+        <img className="brand-mark" src="/2digits.ico" alt="2DIGITS" />
         <p>Werkruimte openen…</p>
       </div>
     );
   if (auth.error)
     return (
       <div className="loading-screen">
-        <h1>BB is niet bereikbaar</h1>
+        <h1>Werkruimte is niet bereikbaar</h1>
         <p>{auth.error.message}</p>
         <Button
           onClick={() => {
@@ -89,9 +85,9 @@ export function App() {
             });
           }}
         >
-          <span className="brand-mark">bb</span>
+          <img className="brand-mark" src="/2digits.ico" alt="2DIGITS" />
           <h1>Welkom terug</h1>
-          <p className="muted">Log in op je software factory.</p>
+          <p className="muted">Open je developmentwerkplek.</p>
           <Field label="Wachtwoord">
             <input name="password" type="password" required autoComplete="current-password" />
           </Field>
@@ -118,7 +114,7 @@ function Factory() {
   const [editProject, setEditProject] = useState<Project | "new" | null>(null);
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("all");
-  const [assignee, setAssignee] = useState("all");
+  const [layout, setLayout] = useState<"list" | "board">("list");
   const [mobileNav, setMobileNav] = useState(false);
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   useEffect(() => {
@@ -140,11 +136,18 @@ function Factory() {
     if (id) url.searchParams.set("task", id);
     else url.searchParams.delete("task");
     history.pushState({}, "", url);
+    window.scrollTo(0, 0);
+    if (!id)
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLButtonElement>(`[data-task-id="${selectedId}"]`)?.focus(),
+      );
   }
   function navigate(next: string) {
+    setSelectedId(null);
     setView(next);
     const url = new URL(location.href);
     url.searchParams.set("view", next);
+    url.searchParams.delete("task");
     history.pushState({}, "", url);
     setSearch("");
     setSource("all");
@@ -159,7 +162,6 @@ function Factory() {
         if (view === "inbox" && task.stage !== "inbox") return false;
         if (view === "actions" && ["amp", "none"].includes(nextAction(task).owner)) return false;
         if (source !== "all" && task.source !== source) return false;
-        if (assignee !== "all" && (task.assigneeId ?? "unassigned") !== assignee) return false;
         return (
           !query ||
           `${task.title} ${task.description} BB-${task.number} ${task.summary}`
@@ -168,11 +170,11 @@ function Factory() {
         );
       }) ?? []
     );
-  }, [data?.tasks, project, view, source, search, assignee]);
+  }, [data?.tasks, project, view, source, search]);
   if (isPending)
     return (
       <div className="loading-screen">
-        <span className="brand-mark">bb</span>
+        <img className="brand-mark" src="/2digits.ico" alt="2DIGITS" />
         <p>Je projecten ophalen…</p>
       </div>
     );
@@ -192,7 +194,6 @@ function Factory() {
     );
   const activeTasks = data.tasks.filter((t) => t.stage !== "done");
   const actions = activeTasks.filter((t) => nextAction(t).owner === "operator").length;
-  const waiting = activeTasks.filter((t) => nextAction(t).owner === "client").length;
   const running = data.tasks.filter((t) => {
     const r = activeRun(t);
     return r?.status === "running" || r?.status === "queued";
@@ -202,7 +203,6 @@ function Factory() {
     project?.name ??
     {
       actions: "Volgende acties",
-      team: "Team",
       inbox: "Inbox",
       all: "Alle taken",
       projects: "Projecten",
@@ -217,7 +217,6 @@ function Factory() {
       all: "Al het werk, van eerste vraag tot oplevering.",
       projects: "Jouw projecten, met de bronnen die jij kiest.",
       connections: "Verbind de bronnen en tools van je werkruimte.",
-      team: "Verdeel het werk en houd de bezetting in beeld.",
     }[view];
   const navItems = [
     { key: "actions", label: "Volgende acties", Icon: ListChecks, count: actions },
@@ -228,7 +227,6 @@ function Factory() {
       count: data.tasks.filter((t) => t.stage === "inbox").length,
     },
     { key: "all", label: "Alle taken", Icon: LayoutGrid },
-    { key: "team", label: "Team", Icon: Users },
   ];
   return (
     <div className="app-shell">
@@ -249,17 +247,12 @@ function Factory() {
             navigate("actions");
           }}
         >
-          <span className="brand-mark">bb</span>
+          <img className="brand-mark" src="/2digits.ico" alt="" />
           <div>
-            <strong>BB</strong>
-            <span>Software factory</span>
+            <strong>2DIGITS</strong>
+            <span>Developmentwerkplek</span>
           </div>
         </a>
-        <div className="workspace-label">
-          <span className="workspace-avatar">2D</span>
-          <span>2DIGITS studio</span>
-          <span className="badge tiny">Development</span>
-        </div>
         <nav aria-label="Hoofdnavigatie">
           <p className="nav-label">WERKRUIMTE</p>
           {navItems.map(({ key, label, Icon, count }) => (
@@ -314,7 +307,7 @@ function Factory() {
               <strong>
                 {running
                   ? `${running} Amp-uitvoering${running > 1 ? "en" : ""}`
-                  : "Alles op jouw tempo"}
+                  : "Geen actieve uitvoering"}
               </strong>
               <small>{running ? "Werkt door in een orb" : "Klaar voor de volgende stap"}</small>
             </div>
@@ -359,7 +352,13 @@ function Factory() {
           </Button>
           <span>Werkruimte</span>
           <ChevronRight size={13} />
-          <strong>{project ? "Projectboard" : title}</strong>
+          <strong>{project?.name ?? title}</strong>
+          {selected ? (
+            <>
+              <ChevronRight size={13} />
+              <span>BB-{selected.number}</span>
+            </>
+          ) : null}
           <span className="spacer" />
           <span className="topbar-date">
             {new Intl.DateTimeFormat("nl-NL", {
@@ -368,139 +367,139 @@ function Factory() {
               month: "long",
             }).format(new Date())}
           </span>
-          <span className="user-avatar">2D</span>
         </div>
-        <header className="page-header">
-          <div className="page-heading">
-            <div className="eyebrow">
-              {project
-                ? "PROJECTBOARD"
-                : view === "actions"
-                  ? "HET WERK GAAT VERDER"
-                  : "SOFTWARE FACTORY"}
-            </div>
-            <h1>
-              {project ? <span className={`project-dot dot-${project.color}`} /> : null}
-              {title}
-              {project?.demo ? <span className="badge">Voorbeeld</span> : null}
-            </h1>
-            <p>{subtitle}</p>
-          </div>
-          <div className="row wrap">
-            {project ? (
-              <>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  aria-label="Projectinstellingen"
-                  onClick={() => setEditProject(project)}
-                >
-                  <Settings2 size={17} />
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={action.isPending || !project.mappings.length}
-                  onClick={() =>
-                    action.mutate(
-                      { path: `/api/projects/${project.id}/sync`, body: {} },
-                      {
-                        onSuccess: (result) => {
-                          const r = result as {
-                            created: number;
-                            duplicate: number;
-                            limited: boolean;
-                            errors: { source: string; message: string }[];
-                          };
-                          toast(
-                            `${r.created} nieuwe taken, ${r.duplicate} al bekend.${r.limited ? " De bron begrenst deze lijst; niet alle items zijn opgehaald." : ""}${r.errors?.length ? ` ${r.errors.map((error) => `${error.source}: ${error.message}`).join(" ")}` : ""}`,
-                            Boolean(r.errors?.length),
-                          );
-                        },
-                      },
-                    )
-                  }
-                >
-                  <RefreshCw size={15} />
-                  Bronnen ophalen
-                </Button>
-              </>
-            ) : null}
-            {view === "projects" ? (
-              <Button onClick={() => setEditProject("new")}>
-                <Plus size={16} />
-                Nieuw project
-              </Button>
-            ) : !["connections", "team"].includes(view) ? (
-              <Button onClick={() => setNewTask(true)}>
-                <Plus size={16} />
-                Nieuwe taak
-              </Button>
-            ) : null}
-          </div>
-        </header>
-        {view === "team" ? (
-          <Team members={data.members} tasks={data.tasks} />
-        ) : view === "connections" ? (
-          <Connections state={data} />
-        ) : view === "projects" ? (
-          <div className="page-body">
-            <div className="project-grid">
-              {data.projects.map((p) => (
-                <section className="panel project-card" key={p.id}>
-                  <div className="row">
-                    <span className={`project-initial initial-${p.color}`}>
-                      {p.name.slice(0, 1)}
-                    </span>
-                    <span className="spacer" />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Instellingen ${p.name}`}
-                      onClick={() => setEditProject(p)}
-                    >
-                      <MoreHorizontal size={18} />
-                    </Button>
-                  </div>
-                  <h2>{p.name}</h2>
-                  <p className="muted">{p.description || "Nog geen omschrijving."}</p>
-                  <div className="row muted small">
-                    <span>{activeTasks.filter((t) => t.projectId === p.id).length} open taken</span>
-                    <span>·</span>
-                    <span>{p.mappings.length} bronnen</span>
-                  </div>
-                  <Button variant="secondary" onClick={() => navigate(p.id)}>
-                    Open board
-                    <ArrowUpRight size={15} />
-                  </Button>
-                </section>
-              ))}
-              <button
-                type="button"
-                className="new-project-card"
-                onClick={() => setEditProject("new")}
-              >
-                <CirclePlus size={26} />
-                <strong>Nieuw project</strong>
-                <span>Eigen board, eigen bronnen</span>
-              </button>
-            </div>
-          </div>
+        {selected ? (
+          <Suspense
+            fallback={
+              <p className="page-body" role="status">
+                Ticket openen…
+              </p>
+            }
+          >
+            <TaskDetail
+              key={selected.id}
+              task={selected}
+              projects={data.projects}
+              ampEnabled={data.connections.amp}
+              members={data.members}
+              onClose={() => openTask(null)}
+              onProjectSettings={() => {
+                const p = data.projects.find((p) => p.id === selected.projectId);
+                if (p) setEditProject(p);
+              }}
+            />
+          </Suspense>
         ) : (
           <>
-            {view === "actions" ? (
-              <div className="stats-row">
-                <Stat label="Team is aan zet" value={actions} Icon={ArrowRight} tone="orange" />
-                <Stat label="Wacht op de klant" value={waiting} Icon={CircleHelp} tone="purple" />
-                <Stat label="Amp aan het werk" value={running} Icon={Boxes} tone="blue" />
-                <Stat
-                  label="Klaar voor review"
-                  value={data.tasks.filter((t) => t.stage === "review").length}
-                  Icon={CheckCheck}
-                  tone="green"
-                />
+            <header className="page-header">
+              <div className="page-heading">
+                <h1>
+                  {project ? <span className={`project-dot dot-${project.color}`} /> : null}
+                  {title}
+                  {project?.demo ? <span className="badge">Voorbeeld</span> : null}
+                </h1>
+                <p>{subtitle}</p>
               </div>
-            ) : null}
-            {!data.projects.length && !data.tasks.length ? (
+              <div className="row wrap">
+                {project ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      aria-label="Projectinstellingen"
+                      onClick={() => setEditProject(project)}
+                    >
+                      <Settings2 size={17} />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={action.isPending || !project.mappings.length}
+                      onClick={() =>
+                        action.mutate(
+                          { path: `/api/projects/${project.id}/sync`, body: {} },
+                          {
+                            onSuccess: (result) => {
+                              const r = result as {
+                                created: number;
+                                duplicate: number;
+                                limited: boolean;
+                                errors: { source: string; message: string }[];
+                              };
+                              toast(
+                                `${r.created} nieuwe taken, ${r.duplicate} al bekend.${r.limited ? " De bron begrenst deze lijst; niet alle items zijn opgehaald." : ""}${r.errors?.length ? ` ${r.errors.map((error) => `${error.source}: ${error.message}`).join(" ")}` : ""}`,
+                                Boolean(r.errors?.length),
+                              );
+                            },
+                          },
+                        )
+                      }
+                    >
+                      <RefreshCw size={15} />
+                      Bronnen ophalen
+                    </Button>
+                  </>
+                ) : null}
+                {view === "projects" ? (
+                  <Button onClick={() => setEditProject("new")}>
+                    <Plus size={16} />
+                    Nieuw project
+                  </Button>
+                ) : view !== "connections" ? (
+                  <Button onClick={() => setNewTask(true)}>
+                    <Plus size={16} />
+                    Nieuwe taak
+                  </Button>
+                ) : null}
+              </div>
+            </header>
+            {view === "connections" ? (
+              <Connections state={data} />
+            ) : view === "projects" ? (
+              <div className="page-body">
+                <div className="project-grid">
+                  {data.projects.map((p) => (
+                    <section className="panel project-card" key={p.id}>
+                      <div className="row">
+                        <span className={`project-initial initial-${p.color}`}>
+                          {p.name.slice(0, 1)}
+                        </span>
+                        <span className="spacer" />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Instellingen ${p.name}`}
+                          onClick={() => setEditProject(p)}
+                        >
+                          <MoreHorizontal size={18} />
+                        </Button>
+                      </div>
+                      <h2>{p.name}</h2>
+                      <p className="muted">{p.description || "Nog geen omschrijving."}</p>
+                      <div className="row muted small">
+                        <span>
+                          {activeTasks.filter((t) => t.projectId === p.id).length} open taken
+                        </span>
+                        <span>·</span>
+                        <span>{p.mappings.length} bronnen</span>
+                      </div>
+                      <Button variant="secondary" onClick={() => navigate(p.id)}>
+                        Bekijk taken
+                        <ArrowUpRight size={15} />
+                      </Button>
+                    </section>
+                  ))}
+                  <button
+                    type="button"
+                    className="new-project-card"
+                    onClick={() => setEditProject("new")}
+                  >
+                    <CirclePlus size={26} />
+                    <strong>Nieuw project</strong>
+                    <span>Eigen board, eigen bronnen</span>
+                  </button>
+                </div>
+              </div>
+            ) : !data.projects.length && !data.tasks.length ? (
               <div className="page-body">
                 <Empty title="Van eerste vraag tot oplevering">
                   <p>
@@ -564,23 +563,28 @@ function Factory() {
                     <option value="manual">Handmatig</option>
                     <option value="email">E-mail</option>
                   </select>
-                  <select
-                    aria-label="Filter op developer"
-                    value={assignee}
-                    onChange={(e) => setAssignee(e.target.value)}
-                  >
-                    <option value="all">Alle developers</option>
-                    <option value="unassigned">Niet toegewezen</option>
-                    {data.members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
+                  {project ? (
+                    <fieldset className="view-switch" aria-label="Weergave">
+                      <button
+                        type="button"
+                        aria-pressed={layout === "list"}
+                        onClick={() => setLayout("list")}
+                      >
+                        Lijst
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={layout === "board"}
+                        onClick={() => setLayout("board")}
+                      >
+                        Board
+                      </button>
+                    </fieldset>
+                  ) : null}
                   <span className="spacer" />
                   <span className="muted small">{filtered.length} taken</span>
                 </div>
-                {project ? (
+                {project && layout === "board" ? (
                   <section className="board" aria-label={`${project.name} kanbanboard`}>
                     {stages.map((stage) => {
                       const tasks = filtered.filter((t) => t.stage === stage);
@@ -604,7 +608,6 @@ function Factory() {
                               <TaskCard
                                 key={task.id}
                                 task={task}
-                                assignee={data.members.find((m) => m.id === task.assigneeId)?.name}
                                 onOpen={() => openTask(task.id)}
                               />
                             ))}
@@ -632,6 +635,7 @@ function Factory() {
                             <button
                               type="button"
                               className="task-row"
+                              data-task-id={task.id}
                               key={task.id}
                               onClick={() => openTask(task.id)}
                             >
@@ -640,11 +644,6 @@ function Factory() {
                                   BB-{String(task.number).padStart(3, "0")}
                                 </span>
                                 <strong>{task.title}</strong>
-                                {task.assigneeId ? (
-                                  <span className="badge">
-                                    {data.members.find((m) => m.id === task.assigneeId)?.name}
-                                  </span>
-                                ) : null}
                                 <SourceBadge source={task.source} />
                               </span>
                               <span className="task-row-project">
@@ -683,10 +682,6 @@ function Factory() {
             )}
           </>
         )}
-        <footer className="page-footer">
-          <span>BB · Software factory</span>
-          <span>Elke taak een duidelijke volgende stap.</span>
-        </footer>
       </main>
       <Suspense
         fallback={
@@ -709,57 +704,16 @@ function Factory() {
             onClose={() => setEditProject(null)}
           />
         ) : null}
-        {selected ? (
-          <TaskDetail
-            key={selected.id}
-            task={selected}
-            projects={data.projects}
-            ampEnabled={data.connections.amp}
-            members={data.members}
-            onClose={() => openTask(null)}
-          />
-        ) : null}
       </Suspense>
     </div>
   );
 }
-function Stat({
-  label,
-  value,
-  Icon,
-  tone,
-}: {
-  label: string;
-  value: number;
-  Icon: typeof ArrowRight;
-  tone: string;
-}) {
-  return (
-    <div className="stat">
-      <span className={`stat-icon stat-${tone}`}>
-        <Icon size={17} />
-      </span>
-      <div>
-        <strong>{value}</strong>
-        <span>{label}</span>
-      </div>
-    </div>
-  );
-}
-function TaskCard({
-  task,
-  assignee,
-  onOpen,
-}: {
-  task: Task;
-  assignee?: string;
-  onOpen: () => void;
-}) {
+function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
   const next = nextAction(task);
   const run = activeRun(task);
   const questions = task.questions.filter((q) => !q.answer).length;
   return (
-    <button type="button" className="task-card" onClick={onOpen}>
+    <button type="button" className="task-card" data-task-id={task.id} onClick={onOpen}>
       <div className="row">
         <span className="task-number">BB-{String(task.number).padStart(3, "0")}</span>
         <span className="spacer" />
@@ -769,7 +723,6 @@ function TaskCard({
       {task.summary ? <p className="card-summary">{task.summary}</p> : null}
       <div className="row wrap">
         <SourceBadge source={task.source} />
-        {assignee ? <span className="badge">{assignee}</span> : null}
         {questions ? (
           <span className="question-count">
             <CircleHelp size={12} />

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Check, Link2, Search, X } from "lucide-react";
 import { useState } from "react";
+import type { AmpProject } from "../../server/amp-projects";
 import type { SourceProject } from "../../server/connectors";
 import type { Project, ProjectInput } from "../../shared/domain";
 import { api, useAction, useToast } from "../lib/api";
@@ -26,6 +27,12 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
   const [page, setPage] = useState(1);
   const action = useAction();
   const toast = useToast();
+  const ampProjects = useQuery({
+    queryKey: ["amp-projects"],
+    queryFn: () => api<{ projects: AmpProject[] }>("/api/amp/projects"),
+    retry: false,
+    staleTime: 60000,
+  });
   const sources = useQuery({
     queryKey: ["sources", provider, search, page],
     queryFn: async () => {
@@ -103,13 +110,52 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
           />
         </Field>
         <div className="form-grid">
-          <Field label="Amp-project" hint="Het project dat Amp in de orb moet openen.">
-            <input
-              value={form.ampProject}
-              onChange={(e) => change("ampProject", e.target.value)}
-              placeholder="namespace/project"
-            />
-          </Field>
+          <div className="stack">
+            <Field label="Amp-project" hint="Het project dat Amp in de orb moet openen.">
+              <select
+                value={form.ampProject}
+                disabled={ampProjects.isPending}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const selected = ampProjects.data?.projects.find(
+                    (p) => `${p.namespace}/${p.name}` === value,
+                  );
+                  setForm((old) => ({
+                    ...old,
+                    ampProject: value,
+                    repository: selected?.repositoryURL || old.repository,
+                  }));
+                }}
+              >
+                <option value="">
+                  {ampProjects.isPending ? "Projecten ophalen…" : "Zonder repository onderzoeken"}
+                </option>
+                {form.ampProject &&
+                !ampProjects.data?.projects.some(
+                  (p) => `${p.namespace}/${p.name}` === form.ampProject,
+                ) ? (
+                  <option value={form.ampProject}>{form.ampProject} · niet geverifieerd</option>
+                ) : null}
+                {ampProjects.data?.projects.map((p) => (
+                  <option key={p.id} value={`${p.namespace}/${p.name}`}>
+                    {p.namespace}/{p.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {ampProjects.error ? (
+              <span className="inline-error">{ampProjects.error.message}</span>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={ampProjects.isFetching}
+              onClick={() => void ampProjects.refetch()}
+            >
+              Projecten opnieuw ophalen
+            </Button>
+          </div>
           <Field label="Repository">
             <input
               type="url"

@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-29T19:32:58.908Z",
+  "title": "Design System: 2DIGITS Developmentwerkplek",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Action purple" },
+      "primary-hover": { "role": "primary", "displayName": "Action purple hover" },
+      "orange-soft": {
+        "role": "primary",
+        "displayName": "Pale purple, historical orange-soft name"
+      },
+      "background": { "role": "neutral", "displayName": "Page white" },
+      "surface": { "role": "neutral", "displayName": "Control white" },
+      "sidebar": { "role": "neutral", "displayName": "Navigation gray" },
+      "foreground": { "role": "neutral", "displayName": "Reading ink" },
+      "muted": { "role": "neutral", "displayName": "Secondary text" },
+      "faint": { "role": "neutral", "displayName": "Metadata text" },
+      "border": { "role": "neutral", "displayName": "Divider gray" },
+      "soft": { "role": "neutral", "displayName": "Inset gray" },
+      "green": { "role": "secondary", "displayName": "Accepted-work green" },
+      "blue": { "role": "secondary", "displayName": "Amp blue" },
+      "purple": { "role": "secondary", "displayName": "Client purple" },
+      "primary-dark": { "role": "primary", "displayName": "Dark-theme action purple" },
+      "background-dark": { "role": "neutral", "displayName": "Dark-theme page" },
+      "surface-dark": { "role": "neutral", "displayName": "Dark-theme control" },
+      "sidebar-dark": { "role": "neutral", "displayName": "Dark-theme navigation" }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Page heading",
+        "purpose": "Operational page titles in the system UI stack."
+      },
+      "headline-mobile": {
+        "displayName": "Mobile page heading",
+        "purpose": "Page headings through 680px."
+      },
+      "ticket-title": {
+        "displayName": "Ticket title",
+        "purpose": "Maximum width 36ch; 26px through 680px, retaining its 1.3 line height."
+      },
+      "title": {
+        "displayName": "Section heading",
+        "purpose": "Source and content section headings."
+      },
+      "section": {
+        "displayName": "Subsection heading",
+        "purpose": "Document and panel subsections."
+      },
+      "body": { "displayName": "Operational body", "purpose": "Default application content." },
+      "reading": {
+        "displayName": "Source reading text",
+        "purpose": "Requests and conversations with a maximum measure of 72ch."
+      },
+      "task-title": {
+        "displayName": "Task-list title",
+        "purpose": "Full-width title within each row; 16px through 680px."
+      },
+      "label": {
+        "displayName": "Button label",
+        "purpose": "Default button text and active navigation weight."
+      },
+      "label-small": {
+        "displayName": "Small button label",
+        "purpose": "Compact secondary actions."
+      },
+      "metadata": {
+        "displayName": "Readable metadata",
+        "purpose": "Sources, timestamps, workflow labels and supporting details."
+      },
+      "badge": {
+        "displayName": "Badge label",
+        "purpose": "Short inline labels with a 1.5 line height."
+      },
+      "identifier": { "displayName": "Task identifier", "purpose": "Monospaced BB task numbers." }
+    },
+    "shadows": [
+      { "name": "primary-button", "value": "0 1px 2px #0001", "purpose": "Primary buttons only." },
+      { "name": "board-card", "value": "0 1px 3px #00000006", "purpose": "Board cards at rest." },
+      {
+        "name": "board-card-hover",
+        "value": "0 3px 12px #00000008",
+        "purpose": "Board-card hover without translation."
+      },
+      {
+        "name": "view-switch-selected",
+        "value": "0 1px 3px #00000012",
+        "purpose": "Selected list or board toggle."
+      },
+      { "name": "dialog", "value": "0 24px 80px #0003", "purpose": "Modal dialog elevation." },
+      { "name": "toast", "value": "0 6px 40px #0002", "purpose": "Floating status messages." },
+      {
+        "name": "running-status-ring",
+        "value": "0 0 0 3px var(--blue-soft)",
+        "purpose": "Running Amp status dot."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-state",
+        "value": "background 0.15s, border-color 0.15s",
+        "purpose": "Button fill and border changes with default CSS ease."
+      },
+      {
+        "name": "board-card-state",
+        "value": "border-color 0.15s, box-shadow 0.15s",
+        "purpose": "Board-card hover treatment."
+      },
+      {
+        "name": "mobile-navigation",
+        "value": "transform 0.2s",
+        "purpose": "Off-canvas navigation through 680px."
+      },
+      {
+        "name": "loading",
+        "value": "spin 1.2s linear infinite",
+        "purpose": "Loading SVG rotation, with a 360deg end keyframe."
+      },
+      {
+        "name": "reduced-motion-duration",
+        "value": "0.01ms",
+        "purpose": "Animation and transition duration override under prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile-max", "value": "680px" },
+      { "name": "tablet-list-min", "value": "681px" },
+      { "name": "tablet-list-max", "value": "900px" },
+      { "name": "stacked-ticket-max", "value": "1000px" },
+      { "name": "compact-desktop-max", "value": "1200px" },
+      { "name": "wide-board-min", "value": "1750px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The next task action, with the implemented disabled and keyboard-focus treatments.",
+      "html": "<button type=\"button\" class=\"ds-button-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14m-7-7 7 7-7 7\"/></svg>Start onderzoek</button>",
+      "css": ".ds-button-primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 14px;border:1px solid var(--primary,#6836d5);border-radius:7px;background:var(--primary,#6836d5);color:#fff;font:550 14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;box-shadow:0 1px 2px #0001;cursor:pointer;transition:background .15s,border-color .15s}.ds-button-primary:hover:not(:disabled){background:var(--primary-hover,#6020d4)}.ds-button-primary:focus-visible{outline:2px solid var(--primary,#6836d5);outline-offset:4px}.ds-button-primary:disabled{opacity:.5;cursor:not-allowed}:host-context(.dark) .ds-button-primary{color:#1b102b}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition-duration:.01ms!important}}"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Bordered supporting actions such as opening project settings.",
+      "html": "<button type=\"button\" class=\"ds-button-secondary\">Projectinstellingen</button>",
+      "css": ".ds-button-secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 14px;border:1px solid var(--border,#e3e5e9);border-radius:7px;background:var(--surface,#fff);color:var(--foreground,#20232a);font:550 14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;cursor:pointer;transition:background .15s,border-color .15s}.ds-button-secondary:hover:not(:disabled){background:var(--soft,#f2f3f5);border-color:var(--faint,#626873)}.ds-button-secondary:focus-visible{outline:2px solid var(--primary,#6836d5);outline-offset:4px}.ds-button-secondary:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition-duration:.01ms!important}}"
+    },
+    {
+      "name": "Ghost button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Quiet navigation and supporting actions.",
+      "html": "<button type=\"button\" class=\"ds-button-ghost\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m12 19-7-7 7-7m-7 7h14\"/></svg>Terug naar taken</button>",
+      "css": ".ds-button-ghost{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 14px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted,#626873);font:550 14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;cursor:pointer;transition:background .15s,border-color .15s}.ds-button-ghost:hover:not(:disabled){background:var(--soft,#f2f3f5);color:var(--foreground,#20232a)}.ds-button-ghost:focus-visible{outline:2px solid var(--primary,#6836d5);outline-offset:4px}.ds-button-ghost:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-ghost{transition-duration:.01ms!important}}"
+    },
+    {
+      "name": "Destructive button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive variant; the implementation has no distinct hover fill.",
+      "html": "<button type=\"button\" class=\"ds-button-danger\">Verwijderen</button>",
+      "css": ".ds-button-danger{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 14px;border:1px solid transparent;border-radius:7px;background:#ad3d32;color:#fff;font:550 14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;cursor:pointer;transition:background .15s,border-color .15s}.ds-button-danger:focus-visible{outline:2px solid var(--primary,#6836d5);outline-offset:4px}.ds-button-danger:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-danger{transition-duration:.01ms!important}}"
+    },
+    {
+      "name": "Labeled text field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Generic field with its actual mobile font-size override; specialized search and stage controls keep their own sizes.",
+      "html": "<label class=\"ds-field\"><span>Naam</span><input class=\"ds-input\" placeholder=\"Projectnaam\" /></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:6px;width:100%;color:var(--foreground,#20232a);font:400 15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-field>span{font-size:13px;font-weight:550}.ds-input{min-width:0;max-width:100%;padding:9px 11px;border:1px solid var(--border,#e3e5e9);border-radius:7px;background:var(--surface,#fff);color:var(--foreground,#20232a);font:400 14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;caret-color:var(--primary,#6836d5)}.ds-input::placeholder{color:var(--faint,#626873)}.ds-input:focus-visible{outline:2px solid var(--primary,#6836d5);outline-offset:4px}@media(max-width:680px){.ds-input{font-size:16px}}"
+    },
+    {
+      "name": "Workspace navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Neutral active navigation with a purple SVG and muted count.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Hoofdnavigatie\"><button type=\"button\" class=\"ds-nav-item ds-nav-active\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m3 17 2 2 4-4m-6-8 2 2 4-4m4 1h8M13 12h8m-8 6h8\"/></svg><span>Volgende acties</span><span class=\"ds-nav-count\">3</span></button><button type=\"button\" class=\"ds-nav-item\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M22 12h-6l-2 3h-4l-2-3H2m3.45-6.89L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z\"/></svg><span>Inbox</span></button></nav>",
+      "css": ".ds-nav{background:var(--sidebar,#f7f8fa)}.ds-nav-item{display:flex;align-items:center;gap:10px;width:100%;min-height:42px;padding:10px 12px;margin:2px 0;border:0;border-radius:6px;background:transparent;color:var(--muted,#626873);font:400 14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:left;cursor:pointer}.ds-nav-item>span:nth-child(2){flex:1}.ds-nav-item:hover{background:var(--soft,#f2f3f5);color:var(--foreground,#20232a)}.ds-nav-item.ds-nav-active{background:var(--surface,#fff);color:var(--foreground,#20232a);font-weight:550;box-shadow:none}.ds-nav-active>svg{color:var(--primary,#6836d5)}.ds-nav-count{color:var(--faint,#626873);font-size:13px;font-variant-numeric:tabular-nums}.ds-nav-active .ds-nav-count{background:transparent;color:var(--muted,#626873);padding:1px 5px;border-radius:4px}.ds-nav-item:focus-visible{outline:2px solid var(--primary,#6836d5);outline-offset:4px}"
+    },
+    {
+      "name": "Neutral badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Noninteractive metadata label used for examples and conversation visibility.",
+      "html": "<span class=\"ds-badge\">Interne notitie</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border:1px solid var(--border,#e3e5e9);border-radius:5px;background:var(--soft,#f2f3f5);color:var(--muted,#626873);font:500 13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap}"
+    },
+    {
+      "name": "Content panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Generic settings and project container. Ticket document sections remove this frame and padding.",
+      "html": "<section class=\"ds-panel\"><h2>Projectinstellingen</h2><p>Bronnen en uitvoering voor dit project.</p></section>",
+      "css": ".ds-panel{min-width:0;padding:21px;border:1px solid var(--border,#e3e5e9);border-radius:9px;background:var(--surface,#fff);color:var(--foreground,#20232a);font:400 15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-panel h2{display:flex;align-items:center;gap:7px;margin:0;font-size:19px;font-weight:600;letter-spacing:-.2px}.ds-panel p{margin:0}@media(max-width:680px){.ds-panel{padding:16px}}"
+    },
+    {
+      "name": "Task-list row",
+      "kind": "custom",
+      "refersTo": "task-row",
+      "description": "Synthetic task row with the shipped tablet two-row layout and mobile flex stack. Status is visible at every width.",
+      "html": "<button type=\"button\" class=\"ds-task-row\"><span class=\"ds-task-title\"><span class=\"ds-task-number\">BB-001</span><strong>Contactformulier controleren</strong><span class=\"ds-task-source\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/></svg>Orbit</span></span><span class=\"ds-task-project\">Voorbeeldproject</span><span class=\"ds-task-action\"><span class=\"ds-action-indicator\"></span>Start onderzoek</span><span class=\"ds-task-stage\"><span class=\"ds-stage-dot\"></span>Inbox<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"/></svg></span></button>",
+      "css": ".ds-task-row{display:grid;grid-template-columns:minmax(210px,2.3fr) minmax(100px,1fr) minmax(150px,1.3fr) minmax(100px,.8fr);align-items:center;gap:20px;width:100%;padding:18px 12px;border:0;border-top:1px solid var(--border,#e3e5e9);background:transparent;color:var(--foreground,#20232a);font:400 14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:left;cursor:pointer}.ds-task-row:hover{background:var(--soft,#f2f3f5)}.ds-task-row:focus-visible{outline:2px solid var(--primary,#6836d5);outline-offset:-2px}.ds-task-title{display:flex;flex-wrap:wrap;align-items:center;gap:7px 12px}.ds-task-title strong{width:100%;order:-1;font-size:15px;line-height:1.5;font-weight:600}.ds-task-number{font-family:'SFMono-Regular',Consolas,monospace;font-size:13px;letter-spacing:.2px;color:var(--faint,#626873)}.ds-task-source{display:inline-flex;align-items:center;gap:4px;color:var(--muted,#626873);font-size:13px;white-space:nowrap}.ds-task-source svg{color:#73a387}.ds-task-project{font-size:13px;color:var(--muted,#626873)}.ds-task-action{display:flex;align-items:center;gap:6px;font-size:13px}.ds-action-indicator{width:4px;height:4px;border-radius:50%;background:currentColor;flex-shrink:0}.ds-task-stage{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted,#626873)}.ds-task-stage>svg{margin-left:auto}.ds-stage-dot{width:7px;height:7px;border:1.5px solid #aaa99f;border-radius:50%;flex-shrink:0}@media(max-width:1200px){.ds-task-row{grid-template-columns:minmax(200px,2fr) minmax(130px,1fr) 110px}.ds-task-project{display:none}}@media(min-width:681px) and (max-width:900px){.ds-task-row{grid-template-columns:minmax(0,1fr) auto}.ds-task-title{grid-column:1/-1}}@media(max-width:680px){.ds-task-row{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:20px 0}.ds-task-title{width:100%}.ds-task-title strong{font-size:16px}.ds-action-indicator,.ds-task-stage>svg{display:none}}"
+    },
+    {
+      "name": "Ticket tabs",
+      "kind": "nav",
+      "refersTo": "ticket-tab",
+      "description": "Ticket section navigation. The production component supplies selection and arrow-key behavior; this snippet shows the visual states.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\" aria-label=\"Taakonderdelen\"><button type=\"button\" class=\"ds-tab\" role=\"tab\" aria-selected=\"true\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"/><path d=\"M14 2v6h6M10 9H8m8 4H8m8 4H8\"/></svg>Ticket</button><button type=\"button\" class=\"ds-tab\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Vragen</button><button type=\"button\" class=\"ds-tab\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Plan</button><button type=\"button\" class=\"ds-tab\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Review</button></div>",
+      "css": ".ds-tabs{display:flex;gap:20px;margin-top:22px;padding:0;border-bottom:1px solid var(--border,#e3e5e9);overflow-x:auto;flex-shrink:0}.ds-tab{display:flex;align-items:center;gap:6px;min-height:48px;padding:12px 14px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted,#626873);font:400 14px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;cursor:pointer}.ds-tab[aria-selected=true]{border-bottom-color:var(--primary,#6836d5);color:var(--foreground,#20232a);font-weight:600}.ds-tab:focus-visible{outline:2px solid var(--primary,#6836d5);outline-offset:4px}@media(max-width:680px){.ds-tabs{gap:18px;margin-top:15px}.ds-tab{min-width:max-content;padding:12px}.ds-tab svg{display:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The personal ticket workbench",
+    "overview": "2DIGITS Developmentwerkplek is a personal workspace for reading client requests and deciding what happens next. White documents, cool neutral navigation and restrained purple actions keep the task text prominent. The interface uses Dutch labels and the official 2DIGITS favicon beside a text wordmark.\n\nSystem UI typography supports daily operational reading. The default task list uses separators, and an opened ticket becomes a full-page document with an action column. Project boards and settings keep their existing bordered containers.",
+    "keyCharacteristics": [
+      "Neutral reading backgrounds in light and dark themes.",
+      "System UI sans with readable content and metadata.",
+      "Flat task rows and document sections.",
+      "Purple actions, focus outlines and active-tab underlines.",
+      "Next actions and workflow status remain visible at narrow widths."
+    ],
+    "rules": [
+      {
+        "name": "The restrained accent Rule",
+        "body": "Keep task rows and ticket sections neutral; use purple for actions, focus and selection indicators.",
+        "section": "colors"
+      },
+      {
+        "name": "The readable metadata Rule",
+        "body": "Use the implemented 13px metadata size for task, source and execution information.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Do use the final stylesheet cascade when extending the task list or ticket workspace.",
+      "Do keep the written workflow status visible beside or below the next action.",
+      "Do preserve the project-settings shortcut through 1000px when the supporting action sections disappear.",
+      "Do preserve source whitespace, readable line lengths and underlined original-source links.",
+      "Do use theme variables for controls and document backgrounds.",
+      "Do keep keyboard focus visible on rows, buttons, fields and tabs."
+    ],
+    "donts": [
+      "Don't replace the system UI stack with the brand's marketing typography.",
+      "Don't wrap every ticket section in a rounded card.",
+      "Don't use workflow color as the only status label.",
+      "Don't inherit earlier tiny metadata sizes or unused eyebrow styles as new design rules.",
+      "Don't treat synthetic review captures as an approved visual comp."
+    ]
+  }
+}

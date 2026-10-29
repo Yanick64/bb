@@ -1,47 +1,35 @@
-# Agency workflow changes
+# Personal development workflow
 
-## Sources
+The 29 October redesign replaces the earlier team-oriented dashboard.
 
-Orbit mappings now select client entities. Tickets with no linked Orbit project can route to the correct board. Several clients can share one board. Existing project mappings keep working, with client matches taking precedence. Local catalogs contain only names and IDs and remain available during a failed connection.
+## Read the request first
 
-Sentry supports an application-owned MCP OAuth connection with PKCE, expiring single-use state and persistent refresh credentials. BB reads project and issue tools only. The connection must be authorized separately from a coding assistant. Source synchronization reports partial failures rather than abandoning other mapped sources.
+The default project view is a task list. A list/board switch keeps kanban available. Opening a task replaces the list with a document workspace. Its source content and conversation sit beside the next action on desktop; mobile puts the action above the document. Back navigation returns to the list.
 
-The local Belvaardig project now has the verified Orbit client and Sentry project mappings. Two Sentry issues and one open Orbit ticket were imported into its inbox. No implementation was launched for those tickets.
+The brand is 2DIGITS with its official favicon and the caption “Developmentwerkplek”. The interface uses one system UI sans, 15px reading text, 14px controls and a 13px metadata floor. Neutral surfaces separate navigation and documents. Purple identifies primary actions and selected tabs.
 
-## From question to implementation
+## Source-specific investigation
 
-The final blocking answer queues continuation automatically when Amp is enabled and the previous run succeeded in the same project. The answer and queued run commit together in SQLite. Retried requests cannot enqueue the same continuation twice. Interrupted runs still require reconciliation.
+Orbit imports ticket details, conversation and attachment metadata. Empty ticket descriptions fall back to the first customer-visible message. Public messages and internal notes remain distinct. The original source is linked, HTML is rendered as plain text, and refresh enriches an existing task without replacing an operator-written description. The connector reports its 100-message cap. Expired attachment links require a fresh fetch or opening Orbit.
 
-Answers that invalidate approval return to planning. BB preserves findings and the remote thread, while requiring human approval of the resulting plan before code changes resume. A question created without a prior agent run does not launch an unexpected orb.
+Sentry triage/planning requests fetch issue details and recent events through MCP before queueing Amp. The resulting snapshot includes stack information and environment/release context when supplied by Sentry. Amp must investigate the relevant event and affected flow before proposing a cause. The interface and prompt expose missing source access, preserving the last fetched context.
 
-Agent instructions are in `server/agent-instructions.ts`. They cover full ticket context, reproduction, root-cause investigation, affected-flow checks, minimal implementation, unmerged draft PRs, technical review and delivery. They distinguish facts from hypotheses and require actual evidence. Client-facing text follows the client's language.
+Manual tasks first distinguish a defect from a change request or research question. Orbit questions may end with a researched answer rather than a code change. Client drafts follow the client's language and exclude internal notes.
 
-## Time and commercial context
+## Amp setup and recovery
 
-The instructions distinguish new business, extensions, ongoing delivery and explicitly agreed paid preparation. They prohibit invented estimates, rates, approvals and SLA coverage. Technical plan approval is not proof of spending authorization.
+Project settings list the projects accessible to the authenticated Amp CLI. Selection fills the repository and removes namespace guessing. Requested runs validate the selected project before queueing.
 
-The task's **Tijd** tab records actual developer minutes, date, work description, billing classification and agreement notes. Unknown classification can remain open. Paid preparation requires an agreement note. These are local records, not invoices or confirmed Orbit bookings. Amp execution time does not become developer time automatically.
+A confirmed project-not-found startup without a thread is failed, with an action to correct project settings. Unknown observer failures remain interrupted, because a remote orb may still be active. Failed work is never retried automatically.
 
-## Review and delivery
+## Approval, delivery and time
 
-A technical review run can inspect the implementation and report findings. It cannot accept the human review. Evidence remains bound to its plan version, review cycle and final revision.
+The final blocking answer still queues continuation atomically when eligible. Answers that invalidate approval return to planning. Changed plans and completed work require human approval. Delivery starts with an editable draft grounded in the accepted result.
 
-Implementation and revision reports can include a client-language delivery draft. After human review, the delivery form shows that draft or a fallback assembled from accepted evidence. An optional delivery run refines the wording. The operator can edit the text or record it as generated. Recording a delivery does not send a message, merge a PR or deploy code.
+The **Tijd** tab records your own minutes directly. It retains the distinction between new business, extensions, ongoing delivery, agreed paid preparation and unclassified time. These are local records; no invoice or Orbit booking is created. Earlier time and assignment records remain stored. Team navigation, developer filters and account-related UI have been removed.
 
-## Team preparation
+## Connection status
 
-The team roster supports stable developer IDs, assignment, workload counts and filtering on boards and the action queue. Optimistic revisions prevent stale task writes. This prepares team planning, while login still uses one operator session. Personal accounts, invitations, permissions and actor-attributed approvals are the next step toward a shared workspace.
+The local Orbit bearer token is still rejected by the official MCP endpoint. Sentry's app-owned OAuth connection still needs login. Existing source snapshots were enriched through the coding assistant's authenticated MCP access, which is separate from the app's persistent connections. Webhook forwarding also needs configuration.
 
-## Interface and performance
-
-The interface uses the 2DIGITS purple `#762bff`, pale `#efeff8`, black and white. Fira Sans and Barlow are self-hosted as Latin WOFF2 files with their licenses. Mobile filters have a full-width search row. Light and dark themes share the same contrast-aware tokens.
-
-Task details, project settings and task creation load on demand. The initial JavaScript bundle dropped from approximately 498 kB to 460 kB before gzip in the measured builds. Live state responses omit stored agent prompts and raw final JSON; the readable summary appears in the conversation. Full reports remain stored on the server.
-
-## Remaining connection steps
-
-- Finish Sentry login from **Verbindingen → Verbind Sentry via MCP**. An unfinished authorization expires after ten minutes, so start a new flow when returning.
-- Confirm the Orbit token's matching MCP URL. The official endpoint returned 401 for the supplied token. The token remains in the local ignored `.env` only.
-- Configure actual webhook forwarding and each customer's Amp project/environment before processing live work.
-
-See [verification status](status.md) for test results and known follow-up work.
+See [status](status.md) for verification and [architecture](architecture.md) for storage and execution boundaries.

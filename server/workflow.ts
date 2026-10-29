@@ -176,13 +176,38 @@ export function applyReport(task: Task, report: AgentReport, mode: string) {
     };
   if (["implement", "revise"].includes(mode)) task.stage = "review";
 }
-export function ingest(store: Store, input: unknown, targetTaskId?: string) {
+export function ingest(
+  store: Store,
+  input: unknown,
+  targetTaskId?: string,
+  updateDescription = true,
+) {
   const data = signalInput.parse(input);
   return store.db.transaction(() => {
     const existing = store
       .signals()
       .find((s) => s.provider === data.provider && s.externalId === data.externalId);
-    if (existing) return { task: store.task(existing.taskId), duplicate: true };
+    if (existing) {
+      // A fresh source snapshot enriches the existing task rather than creating another.
+      // Keep operator-authored descriptions and all workflow history intact.
+      if (data.fetchedAt) {
+        const task = store.task(existing.taskId);
+        if (
+          updateDescription &&
+          task.description !== data.body.slice(0, 20000) &&
+          (!task.description.trim() || task.description === existing.body.slice(0, 20000))
+        )
+          store.update(task.id, (t) => {
+            t.description = data.body.slice(0, 20000);
+          });
+        const updated = { ...existing, ...data };
+        store.db
+          .query("UPDATE signals SET data=? WHERE id=?")
+          .run(JSON.stringify(updated), existing.id);
+        store.changed();
+      }
+      return { task: store.task(existing.taskId), duplicate: true };
+    }
     const projects = store.projects();
     const clientMatches =
       data.provider === "orbit" && data.externalClientId
@@ -210,7 +235,7 @@ export function ingest(store: Store, input: unknown, targetTaskId?: string) {
       : store.createTask(
           {
             title: data.title,
-            description: data.body,
+            description: data.body.slice(0, 20000),
             projectId: matches.length === 1 ? matches[0].id : null,
             kind: data.provider === "sentry" ? "bug" : "question",
           },
