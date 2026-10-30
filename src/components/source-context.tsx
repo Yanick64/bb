@@ -118,7 +118,7 @@ export function SourceContext({
               <h3>
                 Ticketgesprek <span className="muted">· {signal.comments.length} berichten</span>
               </h3>
-              {signal.comments.map((comment) => (
+              {signal.comments.toReversed().map((comment) => (
                 <section
                   className={`source-comment ${comment.internal ? "source-internal" : ""}`}
                   key={comment.id}
