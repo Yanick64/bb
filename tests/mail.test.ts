@@ -4,6 +4,7 @@ import { Connectors } from "../server/connectors";
 import { GoogleMail, normalizeMailThread, parseMailSearch } from "../server/google-mail";
 import { AppError, Store } from "../server/store";
 import { projectInput } from "../shared/domain";
+import { mailProjects } from "../shared/mail-routing";
 
 const email = "operator@example.com";
 const threadId = "abc123def456";
@@ -55,6 +56,7 @@ test("mail thread normalization rejects errors and mismatched identities, and ma
   expect(source.externalId).toBe(`${email}:${threadId}`);
   expect(source.body).toContain("=== Message 2 ===");
   expect(source.url).toContain("authuser=operator%40example.com");
+  expect(source.client).toBe("Client <client@example.com>");
   expect(() => normalizeMailThread("Error: thread not found", email, threadId)).toThrow(
     "niet herkend",
   );
@@ -92,7 +94,7 @@ function setup() {
     new Connectors({ sentryUrl: "https://sentry.io" }, undefined, undefined, mail),
     { dataDir: "./data/test", ampEnabled: false },
   );
-  const importThread = (projectId: string | null = null) =>
+  const importThread = (projectId?: string | null) =>
     app.request("http://localhost/api/mail/import", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -123,4 +125,79 @@ test("failed mail retrieval or invalid destination cannot leave an empty task", 
   expect((await importThread()).status).toBe(502);
   expect(store.tasks()).toHaveLength(0);
   expect(store.signals()).toHaveLength(0);
+});
+
+test("sender rules normalize addresses and match exact senders before domains", () => {
+  const { store } = setup();
+  const domain = store.saveProject(
+    projectInput.parse({ name: "Domain", mailSenders: ["EXAMPLE.COM", "@example.com"] }),
+  );
+  const exact = store.saveProject(
+    projectInput.parse({ name: "Contact", mailSenders: [" Client@Example.com "] }),
+  );
+  expect(domain.mailSenders).toEqual(["@example.com"]);
+  expect(mailProjects(store.projects(), "Client <CLIENT@example.com>").map((p) => p.id)).toEqual([
+    exact.id,
+  ]);
+  expect(mailProjects(store.projects(), "other@example.com").map((p) => p.id)).toEqual([domain.id]);
+  expect(mailProjects(store.projects(), "@example.com <attacker@evil.com>")).toEqual([]);
+  expect(mailProjects(store.projects(), "client@notexample.com")).toEqual([]);
+  expect(mailProjects(store.projects(), "client@sub.example.com")).toEqual([]);
+  expect(projectInput.parse({ name: "Legacy" }).mailSenders).toEqual([]);
+  for (const value of [
+    "from:someone",
+    "@",
+    "example.com OR in:inbox",
+    "https://example.com",
+    "a@b@c.com",
+  ])
+    expect(projectInput.safeParse({ name: "Invalid", mailSenders: [value] }).success).toBe(false);
+});
+
+test("automatic mail routing shows suggestions and preserves the destination on reimport", async () => {
+  const { store, app, importThread } = setup();
+  const project = store.saveProject(
+    projectInput.parse({ name: "Mail client", mailSenders: ["@example.com"] }),
+  );
+  const list = await (await app.request("http://localhost/api/mail")).json();
+  expect(list.messages[0].suggestedProjectIds).toEqual([project.id]);
+  const imported = await (await importThread()).json();
+  expect(imported.task.projectId).toBe(project.id);
+  store.saveProject({ ...project, mailSenders: [] }, project.id);
+  const again = await (await importThread()).json();
+  expect(again.duplicate).toBe(true);
+  expect(again.task.projectId).toBe(project.id);
+});
+
+test("ambiguous sender rules use the inbox and an explicit inbox choice overrides matching", async () => {
+  for (const ambiguous of [true, false]) {
+    const { store, importThread } = setup();
+    store.saveProject(projectInput.parse({ name: "First", mailSenders: ["@example.com"] }));
+    if (ambiguous)
+      store.saveProject(projectInput.parse({ name: "Second", mailSenders: ["@example.com"] }));
+    const result = await (await importThread(ambiguous ? undefined : null)).json();
+    expect(result.task.projectId).toBeNull();
+  }
+});
+
+test("removed mail connection rejects search and imports until explicitly reconnected", async () => {
+  const { store, app, mail, importThread } = setup();
+  expect(
+    (await app.request("http://localhost/api/connections/mail", { method: "DELETE" })).status,
+  ).toBe(200);
+  expect((await app.request("http://localhost/api/mail")).status).toBe(409);
+  expect((await importThread()).status).toBe(409);
+  expect(mail.status.configured).toBe(false);
+  const restarted = createApp(
+    store,
+    new Connectors({ sentryUrl: "https://sentry.io" }, undefined, undefined, mail),
+    { dataDir: "./data/test", ampEnabled: false },
+  );
+  expect((await restarted.request("http://localhost/api/mail")).status).toBe(409);
+  expect(
+    (await restarted.request("http://localhost/api/connections/mail/connect", { method: "POST" }))
+      .status,
+  ).toBe(200);
+  expect((await restarted.request("http://localhost/api/mail")).status).toBe(200);
+  expect(mail.status.configured).toBe(true);
 });

@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { AmpWorker } from "./amp";
 import { createApp } from "./app";
+import { connectionEnabled } from "./connection-state";
 import { Connectors } from "./connectors";
 import { GoogleMail } from "./google-mail";
 import { McpOAuth } from "./mcp-oauth";
@@ -68,7 +69,8 @@ const worker = new AmpWorker(store, {
 });
 let processing = false;
 const webhookTimer = setInterval(async () => {
-  if (processing) return;
+  if (processing || !connectionEnabled(store, "webhook") || !connectionEnabled(store, "orbit"))
+    return;
   const receipt = receipts(store).find((r) => r.status === "pending");
   if (!receipt) return;
   processing = true;

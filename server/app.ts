@@ -7,9 +7,11 @@ import { setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import { ZodError, z } from "zod";
 import { mappingSchema, projectInput, taskInput } from "../shared/domain";
+import { mailProjects } from "../shared/mail-routing";
 import { commandAndContinue, enqueue } from "./amp";
 import { listAmpProjects, validateAmpProject } from "./amp-projects";
 import { saveImage } from "./artifacts";
+import { connectionEnabled, connectionId, requireConnection } from "./connection-state";
 import {
   type Connectors,
   parseOrbitClients,
@@ -38,6 +40,8 @@ export type AppConfig = {
   webhookUrl?: string;
 };
 export function createApp(store: Store, connectors: Connectors, config: AppConfig) {
+  connectors.enabled = (id) => connectionEnabled(store, id);
+  if (connectors.googleMail) connectors.googleMail.enabled = () => connectionEnabled(store, "mail");
   const app = new Hono();
   const publicUrl = config.publicUrl ? new URL(config.publicUrl) : null;
   const webhookUrl = config.webhookUrl ? new URL(config.webhookUrl) : null;
@@ -133,6 +137,7 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     return c.json({ ok: true });
   });
   app.post("/api/webhooks/orbit", async (c) => {
+    requireConnection(store, "webhook");
     const raw = await c.req.text();
     if (raw.length > 1_000_000) throw new AppError("Webhook te groot", 413);
     verifyWebhook(
@@ -174,10 +179,12 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     await next();
   });
   app.post("/api/sentry/oauth/start", async (c) => {
+    requireConnection(store, "sentry");
     if (!connectors.sentryMcp) throw new AppError("Stel SENTRY_MCP_URL en SENTRY_ORG in", 503);
     return c.json({ url: await connectors.sentryMcp.authorize() });
   });
   app.post("/api/orbit/oauth/start", async (c) => {
+    requireConnection(store, "orbit");
     if (!connectors.orbitMcp)
       throw new AppError("Stel de officiële ORBIT_MCP_URL in voor OAuth", 503);
     const url = await connectors.orbitMcp.authorize();
@@ -193,8 +200,9 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
         .map((t) => ({ ...t, runs: t.runs.map((r) => ({ ...r, prompt: "", result: "" })) })),
       connections: {
         ...connectors.status,
-        amp: config.ampEnabled,
-        webhook: Boolean(config.webhookSecret),
+        amp: config.ampEnabled && connectionEnabled(store, "amp"),
+        webhook: Boolean(config.webhookSecret) && connectionEnabled(store, "webhook"),
+        removed: connectionId.options.filter((id) => !connectionEnabled(store, id)),
         webhookUrl:
           config.webhookUrl ?? (config.publicUrl ? `${config.publicUrl}/api/webhooks/orbit` : ""),
         publicUrl: config.publicUrl ?? "",
@@ -364,11 +372,12 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
         c.req.param("id"),
         input.command,
         input.revision,
-        config.ampEnabled,
+        config.ampEnabled && connectionEnabled(store, "amp"),
       ),
     );
   });
   app.post("/api/tasks/:id/runs", async (c) => {
+    requireConnection(store, "amp");
     if (!config.ampEnabled)
       throw new AppError("Schakel Amp in met BB_AMP_ENABLED=true nadat de CLI is aangemeld", 503);
     const data = z
@@ -396,15 +405,60 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
       events: store.events(c.req.param("id")),
     });
   });
-  app.get("/api/amp/projects", async (c) => c.json({ projects: await listAmpProjects() }));
-  app.post("/api/connections/amp/check", async (c) =>
-    c.json({ ok: true, projects: (await listAmpProjects()).length }),
-  );
+  app.delete("/api/connections/:id", async (c) => {
+    const id = connectionId.parse(c.req.param("id"));
+    if (
+      id === "amp" &&
+      store
+        .tasks()
+        .some((task) => task.runs.some((run) => ["queued", "running"].includes(run.status)))
+    )
+      throw new AppError(
+        "Wacht tot de ingeplande Amp-uitvoeringen zijn afgerond voordat je de verbinding verwijdert.",
+        409,
+      );
+    if (id === "orbit") {
+      await connectors.orbitMcp?.disconnect();
+      connectors.resetOrbitStatus();
+    }
+    if (id === "sentry") await connectors.sentryMcp?.disconnect();
+    store.setSetting(`connection:${id}:disabled`, "true");
+    store.changed();
+    if (id === "mail") await connectors.googleMail?.disconnect();
+    return c.json({ ok: true });
+  });
+  app.post("/api/connections/:id/connect", async (c) => {
+    const id = connectionId.parse(c.req.param("id"));
+    const configured = {
+      amp: config.ampEnabled,
+      orbit: connectors.status.orbitConfigured,
+      sentry: connectors.status.sentryConfigured,
+      mail: Boolean(connectors.googleMail?.configPath && connectors.googleMail.email),
+      webhook: Boolean(config.webhookSecret),
+    };
+    if (!configured[id])
+      throw new AppError("Vul eerst de lokale configuratie voor deze verbinding in.", 503);
+    const oauth =
+      id === "orbit" ? connectors.orbitMcp : id === "sentry" ? connectors.sentryMcp : undefined;
+    const url = oauth ? await oauth.authorize() : null;
+    store.setSetting(`connection:${id}:disabled`, "false");
+    store.changed();
+    return c.json({ ok: true, url });
+  });
+  app.get("/api/amp/projects", async (c) => {
+    requireConnection(store, "amp");
+    return c.json({ projects: await listAmpProjects() });
+  });
+  app.post("/api/connections/amp/check", async (c) => {
+    requireConnection(store, "amp");
+    return c.json({ ok: true, projects: (await listAmpProjects()).length });
+  });
   app.post("/api/connections/sentry/check", async (c) => {
     await connectors.projects("sentry", "", 1);
     return c.json({ ok: true });
   });
   app.post("/api/connections/webhook/check", async (c) => {
+    requireConnection(store, "webhook");
     if (!config.webhookSecret || !webhookUrl)
       throw new AppError(
         "Stel BB_WEBHOOK_URL en BB_ORBIT_WEBHOOK_SECRET in en herstart de werkplek.",
@@ -435,10 +489,12 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     return c.json({ ok: true });
   });
   app.post("/api/connections/mail/check", async (c) => {
+    requireConnection(store, "mail");
     if (!connectors.googleMail) throw new AppError("Google Workspace MCP is niet ingesteld", 503);
     return c.json(await connectors.googleMail.check());
   });
   app.get("/api/mail", async (c) => {
+    requireConnection(store, "mail");
     if (!connectors.googleMail) throw new AppError("Google Workspace MCP is niet ingesteld", 503);
     const result = await connectors.googleMail.search(
       (c.req.query("q") || "in:inbox -in:drafts").slice(0, 1000),
@@ -449,6 +505,7 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
       ...result,
       messages: result.messages.map((m) => ({
         ...m,
+        suggestedProjectIds: mailProjects(store.projects(), m.from).map((p) => p.id),
         url: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(connectors.googleMail?.email ?? "")}#all/${m.threadId}`,
         taskId:
           signals.find(
@@ -460,11 +517,12 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
     });
   });
   app.post("/api/mail/import", async (c) => {
+    requireConnection(store, "mail");
     if (!connectors.googleMail) throw new AppError("Google Workspace MCP is niet ingesteld", 503);
     const { threadId, projectId } = z
       .object({
         threadId: z.string().regex(/^[a-f0-9]+$/),
-        projectId: z.string().nullable().default(null),
+        projectId: z.string().nullable().optional(),
       })
       .parse(await c.req.json());
     if (projectId) store.project(projectId);
@@ -475,11 +533,14 @@ export function createApp(store: Store, connectors: Connectors, config: AppConfi
         .signals()
         .find((s) => s.provider === "email" && s.externalId === signal.externalId);
       if (existing) return ingest(store, signal);
+      const matches = mailProjects(store.projects(), signal.client);
+      const destination =
+        projectId === undefined ? (matches.length === 1 ? matches[0].id : null) : projectId;
       const task = store.createTask(
         {
           title: signal.title,
           description: signal.body.slice(0, 20000),
-          projectId,
+          projectId: destination,
           kind: "question",
         },
         "email",

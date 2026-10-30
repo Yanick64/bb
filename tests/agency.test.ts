@@ -326,6 +326,15 @@ test.each(["sentry", "orbit"] as const)(
         service === "sentry" ? "orbit" : "sentry",
       ).connected,
     ).toBe(false);
+    await mcp.authorize();
+    const pending = state;
+    await mcp.disconnect();
+    expect(mcp.connected).toBe(false);
+    expect(
+      new McpOAuth(store, "https://example.com/mcp", "http://localhost/callback", service)
+        .connected,
+    ).toBe(false);
+    await expect(mcp.callback(pending, "code")).rejects.toThrow("Ongeldige");
   },
 );
 

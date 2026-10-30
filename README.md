@@ -35,12 +35,14 @@ Open http://127.0.0.1:4310. Run one BB server per data directory.
 - Versioned plans. Approval is bound to the current version. Blocking answers invalidate approval so scope can be checked again.
 - A durable Amp queue with bounded concurrency, streamed progress and continuation of the same remote thread.
 - Automatic continuation after the final blocking answer, committed atomically with that answer. Changed scope returns to planning and requires fresh approval.
+- The task action bar stays available on every tab and names the current Amp phase, the work being performed and who acts next. Saving the final blocking answer explains that Amp is continuing automatically.
 - Separate triage, planning, implementation, revision, technical review and delivery instructions, including reproduction, affected-flow verification, client language and billing rules.
 - Review criteria, screenshots with positioned comments, previews, PR links, documents and actual check-status fields. Old evidence cannot authorize a new execution cycle.
 - Explicit human review and delivery. A customer question can end in a reviewed answer without creating a PR.
 - An editable delivery draft generated from actual results, with a reviewed-evidence fallback. Recording delivery does not send a client message or deploy code.
 - Project AI context, customer communication preferences and optional instructions for each workflow step. Amp receives general guidance plus only the active step's instructions.
 - Google Mail search with pagination, project selection and one deduplicated task per conversation.
+- Project-specific mail sender addresses and domains, with visible destination suggestions and manual overrides during import.
 - Read-only Orbit/Sentry intake, stable source-ID deduplication and a persistent Orbit webhook inbox.
 - A project-scoped BB MCP endpoint for task context, questions, proposed plans and evidence.
 - Responsive layout, light/dark themes, keyboard-accessible dialogs and live updates.
@@ -125,6 +127,12 @@ BB starts a separate read-only `workspace-mcp` stdio connection using the same l
 Copy the command and required environment from your existing local MCP configuration, preserving any authorization-related settings it needs. Set `GOOGLE_WORKSPACE_CONFIG=./data/google-workspace.json` and `GOOGLE_WORKSPACE_EMAIL` in `.env`, restrict the JSON file to its owner and restart the full dev process. Tokens are not exported through chat tools or stored in Git.
 
 Open **Google Mail**, search with Gmail operators, choose a destination and select **Maak taak**. Each account/thread pair produces at most one task. Reimport enriches the existing task without moving it to another project. Search returns up to 20 messages per page, deduplicated into conversations. Next/previous pagination preserves the search. The imported conversation is capped at 150,000 characters and shows a warning when truncated. Attachments remain in Google Mail. No sending or mailbox mutation is exposed.
+
+In **Projectinstellingen → Google Mail**, enter sender addresses such as `contact@client.example` or domains such as `@client.example`, one per line. **Automatisch op afzender** suggests a destination from each search result's sender. Exact addresses take precedence over domain rules; domains match exactly, without subdomains. Unmatched or ambiguous senders use the general inbox, and the interface identifies ambiguous matches so you can select a project. **Maak taak** imports into the displayed destination. These rules do not create tasks automatically or move existing tasks. API imports that omit `projectId` match the original thread sender; an explicit `null` selects the general inbox.
+
+### Remove a connection
+
+The red trash icon beside **Verbinding controleren** disconnects a service from this workbench. The choice persists across restarts. Orbit and Sentry discard their local OAuth credentials and pending logins. Google Mail closes its MCP session, and removing the webhook stops receipt intake and processing. Amp can be removed after queued and running executions finish. **Opnieuw verbinden** reuses the local configuration or starts OAuth again. Existing tasks and source snapshots remain available; shared CLI/Google credentials and `.env` configuration are managed outside this screen.
 
 ### Project AI guidance
 

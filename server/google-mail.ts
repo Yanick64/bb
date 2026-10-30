@@ -63,7 +63,13 @@ export function normalizeMailThread(text: string, email: string, threadId: strin
     body: text.slice(0, 50000),
     details: text.length > 50000 ? text.slice(50000, 150000) : "",
     url: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email)}#all/${threadId}`,
-    client: email,
+    client:
+      text
+        .slice(header[0].length)
+        .trimStart()
+        .split(/\r?\n\r?\n/, 1)[0]
+        ?.match(/^From: (.+)$/m)?.[1]
+        ?.trim() ?? "",
     fetchedAt: new Date().toISOString(),
     contextWarning:
       text.length > 150000
@@ -73,6 +79,7 @@ export function normalizeMailThread(text: string, email: string, threadId: strin
 }
 
 export class GoogleMail {
+  enabled = () => true;
   private client?: Client;
   private connected = false;
   private queue: Promise<unknown> = Promise.resolve();
@@ -82,12 +89,14 @@ export class GoogleMail {
   ) {}
   get status() {
     return {
-      configured: Boolean(this.configPath && this.email),
-      connected: this.connected,
+      configured: this.enabled() && Boolean(this.configPath && this.email),
+      connected: this.enabled() && this.connected,
       email: this.email,
     };
   }
   private async connect() {
+    if (!this.enabled())
+      throw new AppError("Google Mail is verwijderd. Verbind opnieuw via Verbindingen.", 409);
     if (this.client) return this.client;
     if (!this.status.configured)
       throw new AppError("Stel de Google Workspace MCP-configuratie en het account in.", 503);
@@ -198,5 +207,9 @@ export class GoogleMail {
     this.client = undefined;
     this.connected = false;
     await client?.close().catch(() => {});
+  }
+  async disconnect() {
+    await this.queue.catch(() => {});
+    await this.close();
   }
 }

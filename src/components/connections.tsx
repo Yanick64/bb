@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Cable, Copy, KeyRound, RefreshCw, Webhook } from "lucide-react";
+import { Cable, Copy, KeyRound, RefreshCw, Trash2, Webhook } from "lucide-react";
 import { useState } from "react";
 import type { Receipt } from "../../server/webhooks";
 import { api, type State, useAction, useToast } from "../lib/api";
@@ -90,7 +90,7 @@ export function Connections({
       text: "Laat Teamleader Orbit of je bestaande ontvanger meldingen doorsturen. De controle test de publieke route met het lokale webhookgeheim, zonder een taak aan te maken.",
       code: `POST ${state.connections.webhookUrl || "/api/webhooks/orbit"}\nAuthorization: Bearer <BB_ORBIT_WEBHOOK_SECRET>`,
     },
-  ];
+  ].map((card) => ({ ...card, removed: state.connections.removed.includes(card.id) }));
   return (
     <div className="page-body stack">
       <div className="connections-grid">
@@ -101,7 +101,7 @@ export function Connections({
                 <Cable size={20} />
               </span>
               <span className={`badge ${card.ready ? "badge-green" : ""}`}>
-                {card.ready ? "Geconfigureerd" : "Configuratie nodig"}
+                {card.removed ? "Verwijderd" : card.ready ? "Geconfigureerd" : "Configuratie nodig"}
               </span>
             </div>
             <h2>{card.name}</h2>
@@ -112,15 +112,63 @@ export function Connections({
               <pre>{card.code}</pre>
             </details>
             <div className="connection-controls">
-              <Button
-                variant="secondary"
-                disabled={checking !== null || action.isPending}
-                onClick={() => void check(card.id, card.check)}
-              >
-                <RefreshCw size={15} className={checking === card.id ? "spin" : ""} />
-                {checking === card.id ? "Verbinding controleren…" : "Verbinding controleren"}
-              </Button>
-              {card.oauth ? (
+              {card.removed ? (
+                <Button
+                  variant="secondary"
+                  disabled={action.isPending}
+                  onClick={() =>
+                    action.mutate(
+                      { path: `/api/connections/${card.id}/connect`, body: {} },
+                      {
+                        onSuccess: (data) => {
+                          const { url } = data as { url: string | null };
+                          if (url) window.location.assign(url);
+                          else toast(`${card.name} opnieuw gekoppeld`);
+                        },
+                      },
+                    )
+                  }
+                >
+                  Opnieuw verbinden
+                </Button>
+              ) : (
+                <div className="connection-check-row">
+                  <Button
+                    variant="secondary"
+                    disabled={checking !== null || action.isPending}
+                    onClick={() => void check(card.id, card.check)}
+                  >
+                    <RefreshCw size={15} className={checking === card.id ? "spin" : ""} />
+                    {checking === card.id ? "Verbinding controleren…" : "Verbinding controleren"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="connection-remove"
+                    aria-label={`${card.name} verwijderen`}
+                    title={`${card.name} verwijderen`}
+                    disabled={action.isPending || checking !== null}
+                    onClick={() =>
+                      action.mutate(
+                        { path: `/api/connections/${card.id}`, method: "DELETE", body: {} },
+                        {
+                          onSuccess: () => {
+                            setChecks((old) => {
+                              const updated = { ...old };
+                              delete updated[card.id];
+                              return updated;
+                            });
+                            toast(`${card.name} verwijderd uit de werkplek`);
+                          },
+                        },
+                      )
+                    }
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              )}
+              {card.oauth && !card.removed ? (
                 <Button
                   variant="ghost"
                   disabled={action.isPending || checking !== null}

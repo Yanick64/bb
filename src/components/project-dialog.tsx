@@ -17,6 +17,7 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [mailSenders, setMailSenders] = useState(() => project?.mailSenders.join("\n") ?? "");
   const action = useAction();
   const toast = useToast();
   const ampProjects = useQuery({
@@ -59,7 +60,13 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
           action.mutate(
             {
               path: project ? `/api/projects/${project.id}` : "/api/projects",
-              body: form,
+              body: {
+                ...form,
+                mailSenders: mailSenders
+                  .split(/[\n,;]+/)
+                  .map((value) => value.trim())
+                  .filter(Boolean),
+              },
               method: project ? "PUT" : "POST",
             },
             {
@@ -168,6 +175,24 @@ export function ProjectDialog({ project, onClose }: { project?: Project; onClose
             placeholder="bun run lint&#10;bun test&#10;bun run build"
           />
         </Field>
+        <section className="section-divider stack">
+          <h3>Google Mail</h3>
+          <Field
+            label="E-mailadressen en domeinen"
+            hint="Eén per regel. Gebruik contact@klant.nl voor één afzender of @klant.nl voor het hele domein."
+          >
+            <textarea
+              rows={3}
+              value={mailSenders}
+              onChange={(event) => setMailSenders(event.target.value)}
+              placeholder={"contact@klant.nl\n@klant.nl"}
+            />
+          </Field>
+          <p className="muted">
+            Bij Maak taak herkent de werkplek het project aan de afzender. Een exact e-mailadres
+            gaat voor een domein. Je kunt de bestemming in Google Mail aanpassen.
+          </p>
+        </section>
         <section className="section-divider">
           <h3>AI-context</h3>
           <p className="muted">Deze afspraken gaan mee bij elke Amp-uitvoering in dit project.</p>

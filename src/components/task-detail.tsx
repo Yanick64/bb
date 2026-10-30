@@ -17,7 +17,6 @@ import {
   activeRun,
   currentPlan,
   deliveryText,
-  nextAction,
   type Project,
   phaseLabels,
   type Run,
@@ -27,6 +26,7 @@ import {
   type Task,
 } from "../../shared/domain";
 import { api, useAction, useToast } from "../lib/api";
+import { runProgress, runStatusLabels, taskProgress } from "../lib/task-progress";
 import { Empty, ExternalLink, Field, Priority, relativeDate, SourceBadge } from "./common";
 import { SourceContext } from "./source-context";
 import { QuestionsPanel } from "./task-questions";
@@ -56,7 +56,7 @@ export function TaskDetail({
   const [runMode, setRunMode] = useState<Run["mode"] | null>(null);
   const plan = currentPlan(task);
   const run = activeRun(task);
-  const next = nextAction(task);
+  const next = taskProgress(task);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     heading.current?.focus();
@@ -85,7 +85,19 @@ export function TaskDetail({
   const send: SendCommand = (command, onSuccess) =>
     action.mutate(
       { path: `/api/tasks/${task.id}/commands`, body: { revision: task.revision, command } },
-      { onSuccess },
+      {
+        onSuccess: (result) => {
+          if (command.type === "answer") {
+            const updated = result as Task;
+            toast(
+              updated.runs.length > task.runs.length
+                ? "Antwoord opgeslagen. Amp gaat automatisch verder met je antwoorden. Volg de voortgang bovenaan."
+                : "Antwoord opgeslagen",
+            );
+          }
+          onSuccess?.();
+        },
+      },
     );
   function requestRun(mode: Run["mode"]) {
     if (!ampEnabled) {
@@ -143,12 +155,13 @@ export function TaskDetail({
       <div className="ticket-layout">
         <aside className="ticket-actions stack" aria-label="Volgende stap">
           <section className="next-action">
-            <div>
+            <div role="status" aria-live="polite">
+              <span className="next-action-status">{next.status}</span>
               <h2>{next.label}</h2>
               <p>{next.detail}</p>
+              {next.after ? <p className="next-action-after">{next.after}</p> : null}
             </div>
-            {next.owner !== "none" &&
-            (tab !== next.tab || next.tab === "overview" || latest?.status === "failed") ? (
+            {next.owner !== "none" ? (
               <Button
                 disabled={action.isPending}
                 onClick={() => {
@@ -156,7 +169,12 @@ export function TaskDetail({
                   else if (latest?.status === "failed") requestRun(latest.mode);
                   else if (next.tab === "overview" && !run && task.stage !== "delivery")
                     requestRun("triage");
-                  else setTab(next.tab);
+                  else {
+                    setTab(next.tab);
+                    const target = document.getElementById(`tab-${next.tab}`);
+                    target?.focus();
+                    target?.scrollIntoView({ block: "nearest" });
+                  }
                 }}
               >
                 <ArrowRight size={16} />
@@ -556,11 +574,13 @@ export function TaskDetail({
                 {task.runs.toReversed().map((r) => (
                   <section className="panel stack" key={r.id}>
                     <div className="row">
-                      <strong>Amp · {phaseLabels[r.mode]}</strong>
+                      <strong>Amp · {runProgress(task, r).phase}</strong>
                       <span
                         className={`badge ${r.status === "running" ? "badge-blue" : r.status === "failed" || r.status === "interrupted" ? "badge-orange" : ""}`}
                       >
-                        {r.status}
+                        {r.error && r.status === "succeeded"
+                          ? "Resultaat controleren"
+                          : runStatusLabels[r.status]}
                       </span>
                       <time>{relativeDate(r.createdAt)}</time>
                     </div>

@@ -14,6 +14,7 @@ import {
 } from "../shared/domain";
 import { agencyInstructions, phaseInstructions } from "./agent-instructions";
 import { archiveAmpScreenshots } from "./artifacts";
+import { connectionEnabled, requireConnection } from "./connection-state";
 import { AppError, activity, id, now, type Store } from "./store";
 import { applyReport, command, requireIdle, type TaskCommand } from "./workflow";
 
@@ -108,6 +109,7 @@ export function enqueue(
   instruction: string,
   revision: number,
 ) {
+  requireConnection(store, "amp");
   return store.update(
     taskId,
     (task) => {
@@ -259,7 +261,7 @@ export class AmpWorker {
     }
   }
   tick() {
-    if (this.stopped) return;
+    if (this.stopped || !connectionEnabled(this.store, "amp")) return;
     for (const task of this.store.tasks().reverse()) {
       if (this.processes.size >= this.options.concurrency) break;
       const run = task.runs.find((r) => r.status === "queued");

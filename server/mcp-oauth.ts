@@ -98,6 +98,12 @@ export class McpOAuth {
       return redirect;
     });
   }
+  async disconnect() {
+    return this.exclusive(async () => {
+      for (const name of ["client", "tokens", "pending", "verifier"]) this.write(name, null);
+      this.store.changed();
+    });
+  }
   async callback(state: string, code: string) {
     return this.exclusive(async () => {
       const pending = this.read<{ state: string; expires: number }>("pending");

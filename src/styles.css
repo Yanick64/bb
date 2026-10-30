@@ -2393,6 +2393,29 @@ time,
 .next-action > div {
   max-width: 72ch;
 }
+.next-action-status {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.connection-check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.connection-remove,
+.connection-remove:hover:not(:disabled) {
+  color: #b64436;
+  flex-shrink: 0;
+}
+.dark .connection-remove {
+  color: #efa18c;
+}
+.next-action .next-action-after {
+  margin-top: 10px;
+  font-weight: 500;
+}
 .next-action p {
   margin-top: 6px;
   color: var(--foreground);

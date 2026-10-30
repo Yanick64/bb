@@ -6,6 +6,7 @@ export type State = {
   tasks: Task[];
   members: Member[];
   connections: {
+    removed: string[];
     orbit: boolean;
     orbitConfigured: boolean;
     orbitOAuth: boolean;

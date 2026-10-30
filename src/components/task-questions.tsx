@@ -34,9 +34,14 @@ export function QuestionsPanel({
         <div>
           <h2>Vragen & beslissingen</h2>
           <p className="muted">
-            {ampEnabled && task.runs.at(-1)?.status === "succeeded"
-              ? "Na het laatste blokkerende antwoord gaat Amp automatisch verder. Een gewijzigd plan vraagt opnieuw jouw goedkeuring."
-              : "Maak onduidelijkheden concreet voordat het werk verdergaat."}
+            {ampEnabled &&
+            open.some((q) => q.blocks !== "none") &&
+            task.runs.at(-1)?.status === "succeeded" &&
+            !task.runs.at(-1)?.error
+              ? "Na het laatste blokkerende antwoord gaat Amp automatisch verder met je antwoorden en een voorstel voor het vervolg. Bovenaan zie je wat Amp doet. Je beoordeelt het plan voordat de uitvoering start."
+              : !open.length && task.questions.length
+                ? "Alle vragen zijn beantwoord. Bovenaan zie je de voortgang en wie nu aan zet is."
+                : "Maak onduidelijkheden concreet voordat het werk verdergaat."}
           </p>
         </div>
         <Button size="sm" variant="secondary" onClick={() => setAdding(true)} disabled={pending}>

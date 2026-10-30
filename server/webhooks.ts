@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { signalInput } from "../shared/domain";
+import { requireConnection } from "./connection-state";
 import type { Connectors } from "./connectors";
 import { AppError, now, type Store } from "./store";
 import { ingest } from "./workflow";
@@ -56,6 +57,8 @@ export function receive(store: Store, payload: unknown) {
   return receipt;
 }
 export async function processReceipt(store: Store, connectors: Connectors, receiptId: string) {
+  requireConnection(store, "webhook");
+  requireConnection(store, "orbit");
   const receipt = receipts(store).find((r) => r.id === receiptId);
   if (!receipt) throw new AppError("Webhook niet gevonden", 404);
   if (receipt.status === "processed") return receipt;

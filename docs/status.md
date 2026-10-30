@@ -1,11 +1,14 @@
 # Implementation status
 
-Updated 30 October 2026 after the Amp report parsing fix.
+Updated 30 October 2026 after task-progress, connection and mail-routing refinements.
 
 ## Verified
 
 - Strict TypeScript, Biome, the test suite and the production build pass.
 - Amp reports retain investigations when a screenshot has no URL. The missing image becomes a text document, cannot satisfy review criteria and is noted in activity. Subprocess regression tests cover import and review blocking; malformed fields still fail validation with field-level diagnostics.
+- The task action bar keeps its button on every tab and describes investigation, planning, execution, revision, review and delivery separately. Browser checks verified execution and plan navigation across all five tabs and mobile layout.
+- Connection cards have an inline red removal icon and an explicit reconnect action. Tests cover persisted removal, OAuth credential and pending-state cleanup, authentication, blocked token fallbacks, webhook intake and Amp execution guards.
+- Projects accept mail sender addresses and exact domains. Search results display matching projects; exact addresses take precedence. Tests cover normalization, lookalike domains, ambiguous matches, inbox overrides and reimport destination preservation. Browser checks covered settings persistence, suggested destinations, import, removal and reconnection using synthetic data.
 - Teamleader Orbit OAuth and Sentry are connected. Live project synchronization returned zero new tasks, three existing tasks and no errors.
 - The public Funnel webhook returned 401 without authentication and 202 with the receiving secret. Processing linked the known ticket to its existing task. An authenticated connection probe returned success without adding a receipt.
 - Amp, Sentry, Google Mail and public-webhook checks returned HTTP 200. Google Mail reused cached Workspace MCP authorization, returned 19 distinct conversations from 20 messages, retrieved a validated conversation and handled an empty search.

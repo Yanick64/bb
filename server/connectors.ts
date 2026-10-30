@@ -250,9 +250,18 @@ export function parseSentryMcpIssues(value: unknown, project: string, organizati
   }));
 }
 export class Connectors {
+  enabled = (_provider: "orbit" | "sentry") => true;
+  private requireEnabled(provider: "orbit" | "sentry") {
+    if (!this.enabled(provider))
+      throw new AppError("Deze verbinding is verwijderd. Verbind opnieuw via Verbindingen.", 409);
+  }
   private orbitBlockedUntil = 0;
   private orbitError = "";
   private orbitVerified = false;
+  resetOrbitStatus() {
+    this.orbitVerified = false;
+    this.orbitError = "";
+  }
   constructor(
     private config: ConnectorConfig,
     readonly sentryMcp?: SentryMcp,
@@ -261,21 +270,28 @@ export class Connectors {
   ) {}
   get status() {
     return {
-      orbit: (this.orbitMcp?.connected || this.orbitVerified) && !this.orbitError,
+      orbit:
+        this.enabled("orbit") &&
+        (this.orbitMcp?.connected || this.orbitVerified) &&
+        !this.orbitError,
       orbitOAuth: Boolean(this.orbitMcp),
       googleMail: this.googleMail?.status ?? { configured: false, connected: false, email: "" },
       orbitConfigured: Boolean(this.config.orbitUrl),
       orbitError: this.orbitError,
-      sentry: Boolean(
-        this.config.sentryOrg && (this.sentryMcp?.connected || this.config.sentryToken),
-      ),
+      sentry:
+        this.enabled("sentry") &&
+        Boolean(this.config.sentryOrg && (this.sentryMcp?.connected || this.config.sentryToken)),
       sentryMcp: Boolean(this.sentryMcp),
+      sentryConfigured: Boolean(
+        this.config.sentryOrg && (this.sentryMcp || this.config.sentryToken),
+      ),
     };
   }
   async orbitCall(
     name: "ListProjects" | "ListClients" | "GetTicketDetail" | "ListTickets" | "ListTicketComments",
     args: Record<string, unknown>,
   ) {
+    this.requireEnabled("orbit");
     if (!this.config.orbitUrl)
       throw new AppError("Stel ORBIT_MCP_URL in om Teamleader Orbit te verbinden", 503);
     if (Date.now() < this.orbitBlockedUntil)
@@ -340,6 +356,7 @@ export class Connectors {
     this.orbitBlockedUntil = Date.now() + (seconds ? Number(seconds) * 1000 : 60 * 60 * 1000);
   }
   async projects(provider: "orbit" | "sentry", query: string, page: number) {
+    this.requireEnabled(provider);
     if (provider === "orbit")
       return parseOrbitProjects(
         await this.orbitCall("ListProjects", {
@@ -435,6 +452,7 @@ export class Connectors {
             updateDescription,
           );
         else if (signal.provider === "sentry") {
+          this.requireEnabled("sentry");
           if (!this.sentryMcp?.connected)
             throw new AppError(
               "Verbind Sentry via MCP om stacktraces en recente gebeurtenissen op te halen.",
@@ -492,6 +510,7 @@ export class Connectors {
     const errors: { source: string; message: string }[] = [];
     for (const mapping of project.mappings) {
       try {
+        this.requireEnabled(mapping.provider);
         let signals: z.input<typeof signalInput>[];
         if (mapping.provider === "orbit") {
           const data = z.object({ tickets: z.array(orbitTicket) }).parse(

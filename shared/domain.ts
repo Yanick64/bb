@@ -77,6 +77,28 @@ export const projectInput = z.object({
     .default(""),
   repository: optionalUrl,
   qualityCommands: z.string().max(4000).default(""),
+  mailSenders: z
+    .array(
+      z
+        .string()
+        .trim()
+        .toLowerCase()
+        .transform((value) => (value.includes("@") ? value : `@${value}`))
+        .pipe(
+          z.union([
+            z.email(),
+            z
+              .string()
+              .regex(
+                /^@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/,
+                "Gebruik een e-mailadres of domein, bijvoorbeeld contact@klant.nl of @klant.nl",
+              ),
+          ]),
+        ),
+    )
+    .max(100)
+    .default([])
+    .transform((values) => [...new Set(values)]),
   guidance: projectGuidance,
   mappings: z.array(mappingSchema).max(200).default([]),
 });

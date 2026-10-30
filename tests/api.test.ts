@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
+import { enqueue } from "../server/amp";
 import { createApp } from "../server/app";
 import { imageExtension } from "../server/artifacts";
 import { Connectors, normalizeOrbitTicket, parseOrbitProjects } from "../server/connectors";
@@ -67,6 +68,79 @@ test("authenticated webhook probes verify the route without creating receipts or
   expect(await response.json()).toEqual({ ok: true, probe });
   expect(await (await request("/api/webhook-receipts")).json()).toEqual([]);
   expect(store.tasks()).toEqual([]);
+});
+
+test("connection removal persists, blocks webhooks and can be undone locally", async () => {
+  const { store, app, request, connectors } = setup();
+  const receipt = receive(store, { provider: "orbit", externalId: "existing", title: "Existing" });
+  expect(
+    (await app.request("http://localhost/api/connections/webhook", { method: "DELETE" })).status,
+  ).toBe(200);
+  expect(
+    (
+      await request(
+        "/api/webhooks/orbit",
+        { probe: crypto.randomUUID() },
+        { authorization: "Bearer test-webhook-secret" },
+      )
+    ).status,
+  ).toBe(409);
+  await expect(processReceipt(store, connectors, receipt.id)).rejects.toThrow("verwijderd");
+  expect((await (await request("/api/state")).json()).connections.removed).toContain("webhook");
+  expect((await request("/api/connections/webhook/connect", {})).status).toBe(200);
+  expect(
+    (
+      await request(
+        "/api/webhooks/orbit",
+        { probe: crypto.randomUUID() },
+        { authorization: "Bearer test-webhook-secret" },
+      )
+    ).status,
+  ).toBe(200);
+  expect(store.tasks()).toHaveLength(0);
+});
+
+test("removing Amp requires idle runs and prevents new executions", async () => {
+  const { store, app } = setup();
+  const project = store.saveProject(projectInput.parse({ name: "Example" }));
+  const task = store.createTask({ title: "Example", projectId: project.id });
+  let t = enqueue(store, task.id, "triage", "", task.revision);
+  expect(
+    (await app.request("http://localhost/api/connections/amp", { method: "DELETE" })).status,
+  ).toBe(409);
+  t = store.update(t.id, (task) => {
+    task.runs[0].status = "succeeded";
+  });
+  expect(
+    (await app.request("http://localhost/api/connections/amp", { method: "DELETE" })).status,
+  ).toBe(200);
+  expect(() => enqueue(store, t.id, "triage", "", t.revision)).toThrow("verwijderd");
+  expect((await app.request("http://localhost/api/amp/projects")).status).toBe(409);
+});
+
+test("connection removal requires authentication and blocks configured token fallbacks", async () => {
+  const { app } = setup("password");
+  expect(
+    (await app.request("http://localhost/api/connections/sentry", { method: "DELETE" })).status,
+  ).toBe(401);
+  const store = new Store();
+  stores.push(store);
+  const connectors = new Connectors({
+    sentryUrl: "https://sentry.io",
+    sentryOrg: "example",
+    sentryToken: "synthetic",
+    orbitUrl: "https://example.com/mcp",
+    orbitToken: "synthetic",
+  });
+  const connected = createApp(store, connectors, { dataDir: "./data/test", ampEnabled: false });
+  for (const id of ["orbit", "sentry"] as const) {
+    expect(
+      (await connected.request(`http://localhost/api/connections/${id}`, { method: "DELETE" }))
+        .status,
+    ).toBe(200);
+    expect(connectors.status[id]).toBe(false);
+    await expect(connectors.projects(id, "", 1)).rejects.toThrow("verwijderd");
+  }
 });
 test("webhook-only public host admits authenticated receipts but not the application", async () => {
   const store = new Store();

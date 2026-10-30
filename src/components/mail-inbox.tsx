@@ -19,13 +19,16 @@ export function MailInbox({
   const [draft, setDraft] = useState("in:inbox -in:drafts");
   const [query, setQuery] = useState(draft);
   const [pages, setPages] = useState<string[]>([]);
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState("auto");
   const [importing, setImporting] = useState<string | null>(null);
   const action = useAction();
   const mail = useQuery({
     queryKey: ["mail", query, pages.at(-1)],
     queryFn: () =>
-      api<{ messages: (MailMessage & { taskId: string | null })[]; nextPage: string | null }>(
+      api<{
+        messages: (MailMessage & { taskId: string | null; suggestedProjectIds: string[] })[];
+        nextPage: string | null;
+      }>(
         `/api/mail?${new URLSearchParams({ q: query, ...(pages.length ? { page: pages.at(-1) ?? "" } : {}) })}`,
       ),
     enabled: state.connections.googleMail.configured,
@@ -69,9 +72,10 @@ export function MailInbox({
         </div>
         <Field
           label="Nieuwe taken bewaren in"
-          hint="Een bestaand gesprek blijft bij de eerder gekozen taak."
+          hint="Stel afzenders in bij Projectinstellingen → Google Mail. Bestaande taken blijven op hun plek."
         >
           <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <option value="auto">Automatisch op afzender</option>
             <option value="">Algemene inbox</option>
             {state.projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -116,6 +120,17 @@ export function MailInbox({
                 <p className="muted">{message.from}</p>
                 <div className="row wrap small muted">
                   <span>{message.date}</span>
+                  {!message.taskId ? (
+                    <span>
+                      {projectId === "auto"
+                        ? message.suggestedProjectIds.length === 1
+                          ? `Project: ${state.projects.find((p) => p.id === message.suggestedProjectIds[0])?.name}`
+                          : message.suggestedProjectIds.length > 1
+                            ? "Meerdere projecten passen; kies hierboven een bestemming"
+                            : "Geen project herkend · algemene inbox"
+                        : `Bestemming: ${state.projects.find((p) => p.id === projectId)?.name ?? "Algemene inbox"}`}
+                    </span>
+                  ) : null}
                   <ExternalLink href={message.url}>Open in Google Mail</ExternalLink>
                 </div>
               </div>
@@ -131,7 +146,15 @@ export function MailInbox({
                   action.mutate(
                     {
                       path: "/api/mail/import",
-                      body: { threadId: message.threadId, projectId: projectId || null },
+                      body: {
+                        threadId: message.threadId,
+                        projectId:
+                          projectId === "auto"
+                            ? message.suggestedProjectIds.length === 1
+                              ? message.suggestedProjectIds[0]
+                              : null
+                            : projectId || null,
+                      },
                     },
                     {
                       onSuccess: (result) => onOpenTask((result as { task: Task }).task.id),
