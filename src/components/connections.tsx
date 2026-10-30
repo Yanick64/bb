@@ -168,7 +168,7 @@ export function Connections({
                   </Button>
                 </div>
               )}
-              {card.oauth && !card.removed ? (
+              {card.oauth && !card.removed && !card.ready ? (
                 <Button
                   variant="ghost"
                   disabled={action.isPending || checking !== null}
@@ -185,7 +185,7 @@ export function Connections({
                     )
                   }
                 >
-                  {card.ready ? "Opnieuw aanmelden" : "Aanmelden"}
+                  Aanmelden
                 </Button>
               ) : null}
             </div>
