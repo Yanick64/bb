@@ -1,10 +1,11 @@
 # Implementation status
 
-Updated 29 October 2026 after integration and workbench refinement.
+Updated 30 October 2026 after the Amp report parsing fix.
 
 ## Verified
 
-- Strict TypeScript, Biome, 67 tests with 310 assertions and the production build pass.
+- Strict TypeScript, Biome, the test suite and the production build pass.
+- Amp reports retain investigations when a screenshot has no URL. The missing image becomes a text document, cannot satisfy review criteria and is noted in activity. Subprocess regression tests cover import and review blocking; malformed fields still fail validation with field-level diagnostics.
 - Teamleader Orbit OAuth and Sentry are connected. Live project synchronization returned zero new tasks, three existing tasks and no errors.
 - The public Funnel webhook returned 401 without authentication and 202 with the receiving secret. Processing linked the known ticket to its existing task. An authenticated connection probe returned success without adding a receipt.
 - Amp, Sentry, Google Mail and public-webhook checks returned HTTP 200. Google Mail reused cached Workspace MCP authorization, returned 19 distinct conversations from 20 messages, retrieved a validated conversation and handled an empty search.

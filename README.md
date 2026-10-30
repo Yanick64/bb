@@ -66,6 +66,8 @@ The project setting is optional for repo-less questions and investigations. Laun
 
 Screenshots uploaded to BB accompany subsequent Amp turns as attachments. For screenshot URLs hosted by Amp, BB attempts authenticated download with `amp files get` and stores the image locally. Other screenshot URLs remain links. Private attachments can always be uploaded manually if download is unavailable.
 
+If Amp returns a screenshot without a URL, BB imports it as a document noting the missing image. Its check status becomes `not_run` and its criterion moves into the notes, so it cannot satisfy review criteria. The summary, questions and other evidence are retained. Other invalid report fields still reject the report with field-level diagnostics; the original output remains in run history.
+
 **Optional live smoke test, consumes Amp usage:**
 
 ```sh

@@ -14,6 +14,22 @@ if (!prompt.includes("FAKE_DISCONNECT")) {
     result: JSON.stringify({
       summary: "Onderzocht",
       questions: [{ question: "Welke doelgroep?", recipient: "client", blocks: "implementation" }],
+      ...(prompt.includes("FAKE_MISSING_SCREENSHOT")
+        ? {
+            evidence: [
+              {
+                title: "Login required",
+                kind: "screenshot",
+                url: "",
+                notes: "Screenshot stored at .amp/in/artifacts/login.png",
+                revision: "synthetic-revision",
+                criterion: "The original flow works",
+                checkStatus: "passed",
+              },
+              { title: "Source inspected", kind: "document", revision: "synthetic-revision" },
+            ],
+          }
+        : {}),
     }),
   });
 }

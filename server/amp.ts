@@ -6,6 +6,7 @@ import {
   type AgentReport,
   agentReport,
   currentPlan,
+  evidenceInput,
   type Project,
   type Run,
   type Signal,
@@ -26,14 +27,60 @@ export function ampArgs(run: Run, project: Project): string[] {
   // Prompt goes over stdin, never through a shell or command-line interpolation.
   return args;
 }
-export function parseReport(result: string): AgentReport | null {
+export function parseReport(result: string, diagnostics: string[] = []): AgentReport | null {
   const trimmed = result.trim();
   const block = trimmed.match(/```(?:json)?\s*\n([\s\S]*?)\n```\s*$/)?.[1];
+  let input: unknown;
   try {
-    return agentReport.parse(JSON.parse(block ?? trimmed));
+    input = JSON.parse(block ?? trimmed);
   } catch {
+    diagnostics.push("Het eindresultaat bevat geen geldig JSON-object.");
     return null;
   }
+  const warnings: string[] = [];
+  if (input && typeof input === "object" && "evidence" in input && Array.isArray(input.evidence)) {
+    input.evidence = input.evidence.map((item: unknown, index: number) => {
+      if (!item || typeof item !== "object" || !("kind" in item) || item.kind !== "screenshot")
+        return item;
+      if ("url" in item && item.url !== "" && item.url !== undefined) return item;
+      const checked = evidenceInput.safeParse(item);
+      // Only recover a missing screenshot URL. Other malformed fields still reject the report.
+      if (
+        checked.success ||
+        checked.error.issues.length !== 1 ||
+        checked.error.issues[0]?.path.join(".") !== "url"
+      )
+        return item;
+      const note = "Screenshot ontbreekt: geen downloadlink ontvangen. Alleen tekst bewaard.";
+      const criterion = "criterion" in item ? String(item.criterion ?? "") : "";
+      warnings.push(`evidence.${index}.url: ${note}`);
+      return {
+        ...item,
+        kind: "document",
+        checkStatus: "not_run",
+        // An unavailable image must not satisfy an acceptance criterion, even after review.
+        criterion: "",
+        notes: [
+          note,
+          criterion ? `Oorspronkelijk acceptatiecriterium: ${criterion}` : "",
+          "notes" in item ? item.notes : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      };
+    });
+  }
+  const parsed = agentReport.safeParse(input);
+  if (!parsed.success) {
+    diagnostics.push(
+      ...parsed.error.issues.map(
+        (issue) => `${issue.path.join(".") || "result"}: ${issue.message}`,
+      ),
+    );
+    return null;
+  }
+  diagnostics.push(...warnings);
+  return parsed.data;
 }
 export function buildPrompt(
   task: Task,
@@ -50,6 +97,7 @@ Apply the operator's project guidance to this work and use its communication pre
 Return your final response as one JSON object, optionally in a json code fence, matching:
 {"summary":"...","deliveryDraft":"client-language draft grounded in the result","questions":[{"question":"...","reason":"...","recipient":"operator|client","blocks":"none|planning|implementation|delivery","suggestion":"..."}],"plan":{"summary":"...","steps":["..."],"criteria":["..."]},"evidence":[{"title":"...","kind":"screenshot|preview|pull_request|test|document","url":"https://... or empty for text evidence","notes":"actual commands, exit codes and results","revision":"exact git SHA or document version","side":"before|after|other","criterion":"exact acceptance criterion text","checkStatus":"not_run|running|passed|failed|not_configured"}]}
 All fields on the outer object are optional. Omit plan except in triage/planning. Omit evidence in delivery mode. Do not use a pipe-separated placeholder as a value. A successful process is not proof of passing tests.
+Screenshot, preview and pull_request evidence require a usable URL. A local orb path is not a URL. If a screenshot cannot be shared, use kind=document, checkStatus=not_run and an empty criterion; explain the missing image and retain its local path in notes. Never claim that an unavailable image satisfies an acceptance criterion.
 BB task context follows as JSON:
 ${JSON.stringify({ taskId: task.id, title: task.title, kind: task.kind, description: task.description, summary: task.summary, questions: task.questions, plan: currentPlan(task), evidence: task.evidence, acceptedReview: task.review, sources: signals, messages: task.messages.slice(-20), project: { name: project.name, description: project.description, mappings: project.mappings, repository: project.repository, qualityCommands: project.qualityCommands, context: project.guidance.context, communication: project.guidance.communication, phaseInstruction: project.guidance.phases[mode] }, instruction })}`;
 }
@@ -387,7 +435,8 @@ export class AmpWorker {
       this.finish(task.id, run.id, "failed", final.error ?? `Amp eindigde met code ${exitCode}`);
     } else {
       const text = final.result ?? "";
-      let report = parseReport(text);
+      const diagnostics: string[] = [];
+      let report = parseReport(text, diagnostics);
       if (report && this.options.dataDir)
         report = await archiveAmpScreenshots(report, this.options.dataDir, this.options.binary);
       this.store.update(task.id, (t) => {
@@ -405,10 +454,11 @@ export class AmpWorker {
             : "Het Amp-antwoord kon niet worden ingelezen. Bekijk de thread via Activiteit.",
           createdAt: now(),
         });
-        if (report) applyReport(t, report, run.mode);
-        else
-          r.error =
-            "Geen geldig gestructureerd resultaat ontvangen. Bekijk de Amp-thread en leg het resultaat handmatig vast.";
+        if (report) {
+          applyReport(t, report, run.mode);
+          for (const diagnostic of diagnostics) activity(t, diagnostic);
+        } else
+          r.error = `Geen geldig gestructureerd resultaat ontvangen. ${diagnostics.join(" ")} Bekijk de Amp-thread en leg het resultaat handmatig vast.`;
         activity(
           t,
           report
